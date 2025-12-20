@@ -8,6 +8,13 @@ documentation = "https://docs.rs/zmij"
 edition = "2024"
 license = "MIT"
 
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+
+[[bench]]
+name = "bench"
+harness = false
+
 [workspace]
 members = ["gen-pow10"]
 
