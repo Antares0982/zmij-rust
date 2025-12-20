@@ -833,12 +833,12 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) {
         buffer = buffer.add((bits >> (NUM_BITS - 1)) as usize);
     }
 
-    const NUM_SIG_BITS: i32 = f64::MANTISSA_DIGITS as i32 - 1;
+    const NUM_SIG_BITS: i32 = f64::MANTISSA_DIGITS.cast_signed() - 1;
     const IMPLICIT_BIT: u64 = 1u64 << NUM_SIG_BITS;
     let mut bin_sig = bits & (IMPLICIT_BIT - 1); // binary significand
     let mut regular = bin_sig != 0;
 
-    const NUM_EXP_BITS: i32 = NUM_BITS as i32 - NUM_SIG_BITS - 1;
+    const NUM_EXP_BITS: i32 = NUM_BITS.cast_signed() - NUM_SIG_BITS - 1;
     const EXP_MASK: i32 = (1 << NUM_EXP_BITS) - 1;
     const EXP_BIAS: i32 = (1 << (NUM_EXP_BITS - 1)) - 1;
     let mut bin_exp = (bits >> NUM_SIG_BITS) as i32 & EXP_MASK; // binary exponent
@@ -969,7 +969,7 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) {
 
     // Pick the closest of dec_sig_under and dec_sig_over and check if it's in
     // the rounding interval.
-    let cmp = (scaled_sig - ((dec_sig_under + dec_sig_over) << 1)) as i64;
+    let cmp = (scaled_sig - ((dec_sig_under + dec_sig_over) << 1)).cast_signed();
     let under_closer = cmp < 0 || (cmp == 0 && (dec_sig_under & 1) == 0);
     let under_in = (dec_sig_under << 2) >= lower;
     unsafe {
