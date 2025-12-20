@@ -734,6 +734,7 @@ fn digits2(value: usize) -> *const u8 {
 }
 
 fn digits2_u64(value: u32) -> u64 {
+    #[allow(clippy::cast_ptr_alignment)]
     let digits = digits2(value as usize).cast::<u16>();
     u64::from(unsafe { digits.read() })
 }
