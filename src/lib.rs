@@ -891,7 +891,7 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) {
     const LOG2_POW10_EXP: i32 = 16;
     debug_assert!(dec_exp >= -350 && dec_exp <= 350);
     // pow10_bin_exp = floor(log2(10**-dec_exp))
-    let pow10_bin_exp = -dec_exp * LOG2_POW10_SIG >> LOG2_POW10_EXP;
+    let pow10_bin_exp = (-dec_exp * LOG2_POW10_SIG) >> LOG2_POW10_EXP;
     // pow10 = ((pow10_hi << 64) | pow10_lo) * 2**(pow10_bin_exp - 127)
 
     // Shift to ensure the intermediate result of multiplying by a power of 10
