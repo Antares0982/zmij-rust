@@ -864,7 +864,7 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) {
     bin_exp -= NUM_SIG_BITS + EXP_BIAS;
 
     // Handle small integers.
-    if (bin_exp < 0) & (bin_exp >= -NUM_SIG_BITS) {
+    if (-NUM_SIG_BITS..0).contains(&bin_exp) {
         let f = bin_sig >> -bin_exp;
         if (f << -bin_exp) == bin_sig {
             unsafe { write(buffer, f, 0) }
@@ -879,7 +879,7 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) {
     // log10_2_sig = round(log10(2) * 2**log10_2_exp)
     const LOG10_2_SIG: i32 = 315_653;
     const LOG10_2_EXP: i32 = 20;
-    debug_assert!(bin_exp >= -1334 && bin_exp <= 2620);
+    debug_assert!((-1334..=2620).contains(&bin_exp));
     let dec_exp = (bin_exp * LOG10_2_SIG + i32::from(!regular) * LOG10_3_OVER_4_SIG) >> LOG10_2_EXP;
 
     const DEC_EXP_MIN: i32 = -292;
@@ -889,7 +889,7 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) {
     // log2_pow10_sig = round(log2(10) * 2**log2_pow10_exp) + 1
     const LOG2_POW10_SIG: i32 = 217_707;
     const LOG2_POW10_EXP: i32 = 16;
-    debug_assert!(dec_exp >= -350 && dec_exp <= 350);
+    debug_assert!((-350..=350).contains(&dec_exp));
     // pow10_bin_exp = floor(log2(10**-dec_exp))
     let pow10_bin_exp = (-dec_exp * LOG2_POW10_SIG) >> LOG2_POW10_EXP;
     // pow10 = ((pow10_hi << 64) | pow10_lo) * 2**(pow10_bin_exp - 127)
