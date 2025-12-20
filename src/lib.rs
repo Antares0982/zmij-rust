@@ -987,6 +987,7 @@ pub struct Buffer {
 }
 
 impl Buffer {
+    #[inline]
     pub fn new() -> Self {
         let bytes = [MaybeUninit::<u8>::uninit(); BUFFER_SIZE];
         Buffer { bytes }
@@ -1003,6 +1004,7 @@ impl Buffer {
 }
 
 impl Default for Buffer {
+    #[inline]
     fn default() -> Self {
         Buffer::new()
     }
