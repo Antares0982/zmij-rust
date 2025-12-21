@@ -40,6 +40,7 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
+    clippy::doc_markdown,
     clippy::items_after_statements,
     clippy::must_use_candidate,
     clippy::redundant_else,
