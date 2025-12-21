@@ -979,43 +979,34 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) -> *mut u8 {
 
     if (length as i32 - 1..=15).contains(&dec_exp) {
         // 1234e7 -> 12340000000.0
-        unsafe {
+        return unsafe {
             ptr::copy(buffer.add(1), buffer, length);
             ptr::write_bytes(buffer.add(length), b'0', dec_exp as usize + 3 - length);
             *buffer.add(dec_exp as usize + 1) = b'.';
-            return buffer.add(dec_exp as usize + 3);
-        }
+            buffer.add(dec_exp as usize + 3)
+        };
     } else if (0..=15).contains(&dec_exp) {
         // 1234e-2 -> 12.34
-        unsafe {
+        return unsafe {
             ptr::copy(buffer.add(1), buffer, dec_exp as usize + 1);
             *buffer.add(dec_exp as usize + 1) = b'.';
-            return buffer.add(length + 1);
-        }
+            buffer.add(length + 1)
+        };
     } else if (-5..=-1).contains(&dec_exp) {
         // 1234e-6 -> 0.001234
-        unsafe {
+        return unsafe {
             ptr::copy(buffer.add(1), buffer.add((1 - dec_exp) as usize), length);
             ptr::write_bytes(buffer, b'0', (1 - dec_exp) as usize);
             *buffer.add(1) = b'.';
-            return buffer.add((1 - dec_exp) as usize + length);
-        }
-    } else if length == 1 {
-        // 1e30
-        unsafe {
-            *buffer = *buffer.add(1);
-            buffer = buffer.add(1);
-        }
-    } else {
-        // 1234e30 -> 1.234e33
-        unsafe {
-            *buffer = *buffer.add(1);
-            *buffer.add(1) = b'.';
-            buffer = buffer.add(length + 1);
-        }
+            buffer.add((1 - dec_exp) as usize + length)
+        };
     }
 
     unsafe {
+        // 1234e30 -> 1.234e33
+        *buffer = *buffer.add(1);
+        *buffer.add(1) = b'.';
+        buffer = buffer.add(1 + length * usize::from(length > 1));
         *buffer = b'e';
         buffer = buffer.add(1);
     }
