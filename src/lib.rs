@@ -891,22 +891,22 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) -> *mut u8 {
     // has a fixed 128-bit fractional part. For example, 3 * 2**59 and 3 * 2**60
     // both have dec_exp = 2 and dividing them by 10**dec_exp would have the
     // decimal point in different (bit) positions without the shift:
-    //   3 * 2**59 / 100 = 1.72...e+16 (shift = 1 + 1)
-    //   3 * 2**60 / 100 = 3.45...e+16 (shift = 2 + 1)
-    let shift = bin_exp + pow10_bin_exp + 1;
+    //   3 * 2**59 / 100 = 1.72...e+16 (exp_shift = 1 + 1)
+    //   3 * 2**60 / 100 = 3.45...e+16 (exp_shift = 2 + 1)
+    let exp_shift = bin_exp + pow10_bin_exp + 1;
 
     if regular {
         let uint128 {
             hi: integral,
             lo: fractional,
-        } = umul192_upper128(pow10_hi, pow10_lo, bin_sig << shift);
+        } = umul192_upper128(pow10_hi, pow10_lo, bin_sig << exp_shift);
         let digit = integral % 10;
 
         const NUM_FRACTIONAL_BITS: i32 = 60;
         const TEN: u64 = 10 << NUM_FRACTIONAL_BITS;
         // Fixed-point remainder of the scaled significand modulo 10.
         let rem10 = (digit << NUM_FRACTIONAL_BITS) | (fractional >> 4);
-        let half_ulp = pow10_hi >> (5 - shift);
+        let half_ulp = pow10_hi >> (5 - exp_shift);
         let upper = rem10 + half_ulp;
 
         // An optimization from yy_double by Yaoyuan Guo:
@@ -937,9 +937,9 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) -> *mut u8 {
     // Compute the estimates of lower and upper bounds of the rounding interval
     // by multiplying them by the power of 10 and applying modified rounding.
     let lsb = bin_sig & 1;
-    let lower = (bin_sig_shifted - (u64::from(regular) + 1)) << shift;
+    let lower = (bin_sig_shifted - (u64::from(regular) + 1)) << exp_shift;
     let lower = umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, lower) + lsb;
-    let upper = (bin_sig_shifted + 2) << shift;
+    let upper = (bin_sig_shifted + 2) << exp_shift;
     let upper = umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, upper) - lsb;
 
     // The idea of using a single shorter candidate is by Cassio Neri.
@@ -949,7 +949,8 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) -> *mut u8 {
         return unsafe { write(buffer, shorter, dec_exp) };
     }
 
-    let scaled_sig = umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, bin_sig_shifted << shift);
+    let scaled_sig =
+        umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, bin_sig_shifted << exp_shift);
     let dec_sig_under = scaled_sig >> 2;
     let dec_sig_over = dec_sig_under + 1;
 
