@@ -49,3 +49,12 @@ fn single_candidate() {
     // Only an overestimate is in the rounding region (w in Schubfach).
     assert_eq!(dtoa(6.079537928711555e+61), "6.079537928711555e+61");
 }
+
+#[test]
+fn all_exponents() {
+    for exp in f64::MIN_EXP..f64::MAX_EXP {
+        let expected = f64::exp2(f64::from(exp));
+        let actual = dtoa(expected).parse::<f64>().unwrap();
+        assert_eq!(actual, expected);
+    }
+}
