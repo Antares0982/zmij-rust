@@ -1,3 +1,5 @@
+#![allow(clippy::unreadable_literal)]
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::f64;
 use std::hint;
