@@ -15,7 +15,7 @@
 //! [yy]: https://github.com/ibireme/c_numconv_benchmark/blob/master/vendor/yy_double/yy_double.c
 
 #![no_std]
-#![doc(html_root_url = "https://docs.rs/zmij/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/zmij/0.1.0")]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![allow(
     clippy::blocks_in_conditions,
