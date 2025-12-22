@@ -52,6 +52,7 @@
 
 #[cfg(test)]
 mod tests;
+mod traits;
 
 use core::mem::{self, MaybeUninit};
 use core::ptr;
@@ -832,7 +833,10 @@ struct fp {
 // Converts a binary FP number bin_sig * 2**bin_exp to the shortest decimal
 // representation.
 #[cfg_attr(feature = "no-panic", no_panic)]
-fn to_decimal(bin_sig: u64, bin_exp: i32, regular: bool) -> fp {
+fn to_decimal<UInt>(bin_sig: UInt, bin_exp: i32, regular: bool) -> fp
+where
+    UInt: traits::UInt,
+{
     // Compute the decimal exponent as floor(log10(2**bin_exp)) if regular or
     // floor(log10(3/4 * 2**bin_exp)) otherwise, without branching.
     // log10_3_over_4_sig = round(log10(3/4) * 2**log10_2_exp)
@@ -867,20 +871,21 @@ fn to_decimal(bin_sig: u64, bin_exp: i32, regular: bool) -> fp {
         let uint128 {
             hi: integral,
             lo: fractional,
-        } = umul192_upper128(pow10_hi, pow10_lo, bin_sig << exp_shift);
-        let digit = integral % 10;
+        } = umul192_upper128(pow10_hi, pow10_lo, (bin_sig << exp_shift).into());
+        let digit = UInt::truncate(integral % 10);
 
         // Switch to a fixed-point representation with the integral part in the
         // upper 4 bits and the rest being the fractional part.
         const NUM_INTEGRAL_BITS: i32 = 4;
         const NUM_FRACTIONAL_BITS: i32 = NUM_BITS as i32 - NUM_INTEGRAL_BITS;
-        const TEN: u64 = 10 << NUM_FRACTIONAL_BITS;
+        let ten = UInt::from(10) << NUM_FRACTIONAL_BITS;
         // Fixed-point remainder of the scaled significand modulo 10.
-        let rem10 = (digit << NUM_FRACTIONAL_BITS) | (fractional >> NUM_INTEGRAL_BITS);
+        let rem10 =
+            (digit << NUM_FRACTIONAL_BITS) | UInt::truncate(fractional >> NUM_INTEGRAL_BITS);
         // dec_exp is chosen so that 10**dec_exp <= 2**bin_exp < 10**(dec_exp + 1).
         // Since 1ulp == 2**bin_exp it will be in the range [1, 10) after scaling
         // by 10**dec_exp. Add 1 to combine the shift with division by two.
-        let half_ulp10 = pow10_hi >> (NUM_INTEGRAL_BITS - exp_shift + 1);
+        let half_ulp10 = UInt::truncate(pow10_hi >> (NUM_INTEGRAL_BITS - exp_shift + 1));
         let upper = rem10 + half_ulp10;
 
         // An optimization from yy by Yaoyuan Guo:
@@ -890,16 +895,16 @@ fn to_decimal(bin_sig: u64, bin_exp: i32, regular: bool) -> fp {
             // Exact half-ulp tie when rounding to nearest 10.
             rem10 != half_ulp10 &&
             // Near-boundary case for rounding to nearest 10.
-            TEN.wrapping_sub(upper) > 1
+            ten.wrapping_sub(upper) > UInt::from(1)
         } {
-            let round = (upper >> NUM_FRACTIONAL_BITS) >= 10;
-            let shorter = integral - digit + u64::from(round) * 10;
-            let longer = integral + u64::from(fractional >= (1 << 63));
+            let round = (upper >> NUM_FRACTIONAL_BITS) >= UInt::from(10);
+            let shorter = UInt::truncate(integral - digit.into() + u64::from(round) * 10);
+            let longer = UInt::truncate(integral + u64::from(fractional >= (1 << 63)));
             return fp {
                 sig: if rem10 <= half_ulp10 || round {
-                    shorter
+                    shorter.into()
                 } else {
-                    longer
+                    longer.into()
                 },
                 exp: dec_exp,
             };
@@ -916,37 +921,46 @@ fn to_decimal(bin_sig: u64, bin_exp: i32, regular: bool) -> fp {
 
     // Compute the estimates of lower and upper bounds of the rounding interval
     // by multiplying them by the power of 10 and applying modified rounding.
-    let lsb = bin_sig & 1;
-    let lower = (bin_sig_shifted - (u64::from(regular) + 1)) << exp_shift;
-    let lower = umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, lower) + lsb;
-    let upper = (bin_sig_shifted + 2) << exp_shift;
-    let upper = umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, upper) - lsb;
+    let lsb = bin_sig & UInt::from(1);
+    let lower = (bin_sig_shifted - (UInt::from(regular) + UInt::from(1))) << exp_shift;
+    let lower = UInt::truncate(
+        umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, lower.into()) + lsb.into(),
+    );
+    let upper = (bin_sig_shifted + UInt::from(2)) << exp_shift;
+    let upper = UInt::truncate(
+        umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, upper.into()) - lsb.into(),
+    );
 
     // The idea of using a single shorter candidate is by Cassio Neri.
     // It is less or equal to the upper bound by construction.
-    let shorter = 10 * ((upper >> BOUND_SHIFT) / 10);
+    let shorter = (upper >> BOUND_SHIFT) / UInt::from(10) * UInt::from(10);
     if (shorter << BOUND_SHIFT) >= lower {
         return fp {
-            sig: shorter,
+            sig: shorter.into(),
             exp: dec_exp,
         };
     }
 
-    let scaled_sig =
-        umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, bin_sig_shifted << exp_shift);
+    let scaled_sig = UInt::truncate(umul192_upper64_inexact_to_odd(
+        pow10_hi,
+        pow10_lo,
+        (bin_sig_shifted << exp_shift).into(),
+    ));
     let dec_sig_under = scaled_sig >> BOUND_SHIFT;
-    let dec_sig_over = dec_sig_under + 1;
+    let dec_sig_over = dec_sig_under + UInt::from(1);
 
     // Pick the closest of dec_sig_under and dec_sig_over and check if it's in
     // the rounding interval.
-    let cmp = scaled_sig.wrapping_sub((dec_sig_under + dec_sig_over) << 1) as i64;
-    let under_closer = cmp < 0 || (cmp == 0 && (dec_sig_under & 1) == 0);
+    let cmp = scaled_sig
+        .wrapping_sub((dec_sig_under + dec_sig_over) << 1)
+        .into() as i64;
+    let under_closer = cmp < 0 || (cmp == 0 && (dec_sig_under & UInt::from(1)) == UInt::from(0));
     let under_in = (dec_sig_under << BOUND_SHIFT) >= lower;
     fp {
         sig: if under_closer & under_in {
-            dec_sig_under
+            dec_sig_under.into()
         } else {
-            dec_sig_over
+            dec_sig_over.into()
         },
         exp: dec_exp,
     }
