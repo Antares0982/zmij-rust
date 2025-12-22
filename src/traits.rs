@@ -1,5 +1,19 @@
 use core::fmt::Display;
-use core::ops::{Add, BitAnd, BitOr, Div, Mul, Shl, Shr, Sub};
+use core::ops::{Add, BitAnd, BitOr, BitOrAssign, BitXorAssign, Div, Mul, Shl, Shr, Sub};
+
+pub(crate) trait Float: Copy {
+    type UInt: UInt;
+    const MANTISSA_DIGITS: u32;
+    fn to_bits(self) -> Self::UInt;
+}
+
+impl Float for f64 {
+    type UInt = u64;
+    const MANTISSA_DIGITS: u32 = Self::MANTISSA_DIGITS;
+    fn to_bits(self) -> Self::UInt {
+        self.to_bits()
+    }
+}
 
 pub(crate) trait UInt:
     Copy
@@ -15,6 +29,8 @@ pub(crate) trait UInt:
     + Shl<u32, Output = Self>
     + Shr<i32, Output = Self>
     + Shr<u32, Output = Self>
+    + BitOrAssign
+    + BitXorAssign
     + PartialOrd
     + Into<u64>
     + Display

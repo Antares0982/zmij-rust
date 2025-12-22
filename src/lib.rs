@@ -968,28 +968,31 @@ where
 /// Writes the shortest correctly rounded decimal representation of `value` to
 /// `buffer`. `buffer` should point to a buffer of size `buffer_size` or larger.
 #[cfg_attr(feature = "no-panic", no_panic)]
-unsafe fn dtoa(value: f64, mut buffer: *mut u8) -> *mut u8 {
+unsafe fn dtoa<Float>(value: Float, mut buffer: *mut u8) -> *mut u8
+where
+    Float: traits::Float,
+{
     let bits = value.to_bits();
 
-    const NUM_BITS: i32 = mem::size_of::<f64>() as i32 * 8;
+    let num_bits = mem::size_of::<Float>() as i32 * 8;
     unsafe {
         *buffer = b'-';
-        buffer = buffer.add((bits >> (NUM_BITS - 1)) as usize);
+        buffer = buffer.add((bits >> (num_bits - 1)).into() as usize);
     }
 
-    const NUM_SIG_BITS: i32 = f64::MANTISSA_DIGITS as i32 - 1;
-    const IMPLICIT_BIT: u64 = 1u64 << NUM_SIG_BITS;
-    let mut bin_sig = bits & (IMPLICIT_BIT - 1); // binary significand
-    let mut regular = bin_sig != 0;
+    let num_sig_bits = Float::MANTISSA_DIGITS as i32 - 1;
+    let implicit_bit = Float::UInt::from(1) << num_sig_bits;
+    let mut bin_sig = bits & (implicit_bit - Float::UInt::from(1)); // binary significand
+    let mut regular = bin_sig != Float::UInt::from(0);
 
-    const NUM_EXP_BITS: i32 = NUM_BITS - NUM_SIG_BITS - 1;
-    const EXP_MASK: i32 = (1 << NUM_EXP_BITS) - 1;
-    const EXP_BIAS: i32 = (1 << (NUM_EXP_BITS - 1)) - 1;
-    let mut bin_exp = (bits >> NUM_SIG_BITS) as i32 & EXP_MASK; // binary exponent
+    let num_exp_bits = num_bits - num_sig_bits - 1;
+    let exp_mask = (1 << num_exp_bits) - 1;
+    let exp_bias = (1 << (num_exp_bits - 1)) - 1;
+    let mut bin_exp = (bits >> num_sig_bits).into() as i32 & exp_mask; // binary exponent
 
     let mut subnormal = false;
     if bin_exp == 0 {
-        if bin_sig == 0 {
+        if bin_sig == Float::UInt::from(0) {
             return unsafe {
                 *buffer = b'0';
                 *buffer.add(1) = b'.';
@@ -998,13 +1001,13 @@ unsafe fn dtoa(value: f64, mut buffer: *mut u8) -> *mut u8 {
             };
         }
         // Handle subnormals.
-        bin_sig |= IMPLICIT_BIT;
+        bin_sig |= implicit_bit;
         bin_exp = 1;
         regular = true;
         subnormal = true;
     }
-    bin_sig ^= IMPLICIT_BIT;
-    bin_exp -= NUM_SIG_BITS + EXP_BIAS;
+    bin_sig ^= implicit_bit;
+    bin_exp -= num_sig_bits + exp_bias;
 
     let fp {
         sig: dec_sig,
