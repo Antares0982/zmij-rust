@@ -785,8 +785,8 @@ fn to_bcd8(abcdefgh: u64) -> u64 {
     a_b_c_d_e_f_g_h.to_be()
 }
 
-// Writes a significand consisting of 16 or 17 decimal digits and removes
-// trailing zeros.
+// Writes a significand consisting of up to 17 decimal digits (16-17 for
+// normals) and removes trailing zeros.
 #[cfg_attr(feature = "no-panic", no_panic)]
 unsafe fn write_significand(mut buffer: *mut u8, value: u64) -> *mut u8 {
     // Each digits is denoted by a letter so value is abbccddeeffgghhii where
