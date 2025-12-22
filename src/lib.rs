@@ -922,7 +922,8 @@ fn to_decimal(bin_sig: u64, bin_exp: i32, regular: bool) -> fp {
     pow10_lo += 1;
 
     // Shift the significand so that boundaries are integer.
-    let bin_sig_shifted = bin_sig << 2;
+    const BOUND_SHIFT: u32 = 2;
+    let bin_sig_shifted = bin_sig << BOUND_SHIFT;
 
     // Compute the estimates of lower and upper bounds of the rounding interval
     // by multiplying them by the power of 10 and applying modified rounding.
@@ -934,8 +935,8 @@ fn to_decimal(bin_sig: u64, bin_exp: i32, regular: bool) -> fp {
 
     // The idea of using a single shorter candidate is by Cassio Neri.
     // It is less or equal to the upper bound by construction.
-    let shorter = 10 * ((upper >> 2) / 10);
-    if (shorter << 2) >= lower {
+    let shorter = 10 * ((upper >> BOUND_SHIFT) / 10);
+    if (shorter << BOUND_SHIFT) >= lower {
         return fp {
             sig: shorter,
             exp: dec_exp,
@@ -944,14 +945,14 @@ fn to_decimal(bin_sig: u64, bin_exp: i32, regular: bool) -> fp {
 
     let scaled_sig =
         umul192_upper64_inexact_to_odd(pow10_hi, pow10_lo, bin_sig_shifted << exp_shift);
-    let dec_sig_under = scaled_sig >> 2;
+    let dec_sig_under = scaled_sig >> BOUND_SHIFT;
     let dec_sig_over = dec_sig_under + 1;
 
     // Pick the closest of dec_sig_under and dec_sig_over and check if it's in
     // the rounding interval.
     let cmp = scaled_sig.wrapping_sub((dec_sig_under + dec_sig_over) << 1) as i64;
     let under_closer = cmp < 0 || (cmp == 0 && (dec_sig_under & 1) == 0);
-    let under_in = (dec_sig_under << 2) >= lower;
+    let under_in = (dec_sig_under << BOUND_SHIFT) >= lower;
     fp {
         sig: if under_closer & under_in {
             dec_sig_under
