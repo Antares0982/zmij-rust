@@ -730,7 +730,7 @@ fn divmod100(value: u32) -> (u32, u32) {
 
 #[cfg_attr(feature = "no-panic", no_panic)]
 fn count_trailing_nonzeros(x: u64) -> usize {
-    // We count the number of bytes until there are only '\0's left.
+    // We count the number of bytes until there are only zeros left.
     // The code is equivalent to
     //    8 - x.leading_zeros() / 8
     // but if the BSR instruction is emitted (as gcc on x64 does with default
@@ -739,9 +739,9 @@ fn count_trailing_nonzeros(x: u64) -> usize {
     // in the opposite direction.
     //
     // Additionally, the BSR instruction requires a zero check. Since the high
-    // bit is never set we can avoid the zero check by shifting the datum left
-    // by one and inserting a sentinel bit at the end. On my x64 this is a
-    // measurable speed-up over the automatically inserted range check.
+    // bit is unused we can avoid the zero check by shifting the datum left by
+    // one and inserting a sentinel bit at the end. This can be faster than the
+    // automatically inserted range check.
     (70 - ((x.to_le() << 1) | 1).leading_zeros()) as usize / 8
 }
 
