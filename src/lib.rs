@@ -1178,10 +1178,7 @@ impl Buffer {
 #[allow(unknown_lints)] // rustc older than 1.74
 #[allow(private_bounds)]
 pub trait Float: private::Sealed {}
-
-#[cfg(__f32)]
 impl Float for f32 {}
-
 impl Float for f64 {}
 
 mod private {
@@ -1191,7 +1188,6 @@ mod private {
         unsafe fn write_to_zmij_buffer(self, buffer: *mut u8) -> *mut u8;
     }
 
-    #[cfg(__f32)]
     impl Sealed for f32 {
         #[inline]
         fn is_nonfinite(self) -> bool {
