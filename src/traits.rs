@@ -43,24 +43,7 @@ pub trait UInt:
     + Into<u64>
     + Display
 {
-    fn wrapping_sub(self, other: Self) -> Self;
-    fn truncate(wide: u64) -> Self;
 }
 
-impl UInt for u32 {
-    fn wrapping_sub(self, other: Self) -> Self {
-        self.wrapping_sub(other)
-    }
-    fn truncate(wide: u64) -> Self {
-        wide as u32
-    }
-}
-
-impl UInt for u64 {
-    fn wrapping_sub(self, other: Self) -> Self {
-        self.wrapping_sub(other)
-    }
-    fn truncate(wide: u64) -> Self {
-        wide
-    }
-}
+impl UInt for u32 {}
+impl UInt for u64 {}

@@ -4,7 +4,11 @@ fn dtoa(value: f64) -> String {
     zmij::Buffer::new().format(value).to_owned()
 }
 
-mod zmij_test {
+fn ftoa(value: f32) -> String {
+    zmij::Buffer::new().format(value).to_owned()
+}
+
+mod dtoa_test {
     use super::dtoa;
 
     #[test]
@@ -68,5 +72,14 @@ mod zmij_test {
             let actual = dtoa(expected).parse::<f64>().unwrap();
             assert_eq!(actual, expected);
         }
+    }
+}
+
+mod ftoa_test {
+    use super::ftoa;
+
+    #[test]
+    fn normal() {
+        assert_eq!(ftoa(6.62607e-34), "0.0000000662607e-26");
     }
 }
