@@ -1048,7 +1048,9 @@ where
 
     let length = unsafe { end.offset_from(buffer.add(1)) } as usize;
 
-    if (-5..=15).contains(&dec_exp) {
+    if num_bits == 32 && (-6..=12).contains(&dec_exp)
+        || num_bits == 64 && (-5..=15).contains(&dec_exp)
+    {
         if length as i32 - 1 <= dec_exp {
             // 1234e7 -> 12340000000.0
             return unsafe {
