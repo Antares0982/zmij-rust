@@ -11,7 +11,7 @@ numbers to decimal strings.
 This Rust implementation is a line-by-line port of Victor Zverovich's
 implementation in C++, [https://github.com/vitaut/zmij][upstream].
 
-[upstream]: https://github.com/vitaut/zmij/tree/91c72a7a8894a58aa879ade7906121630586bc4c
+[upstream]: https://github.com/vitaut/zmij/tree/08d5df7158a48563375a8cf5c64b1560f1c2af16
 
 ## Example
 

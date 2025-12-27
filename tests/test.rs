@@ -14,6 +14,8 @@ mod dtoa_test {
     #[test]
     fn normal() {
         assert_eq!(dtoa(6.62607015e-34), "6.62607015e-34");
+
+        // Exact half-ulp tie when rounding to nearest integer.
         assert_eq!(dtoa(5.444310685350916e+14), "544431068535091.6");
     }
 
