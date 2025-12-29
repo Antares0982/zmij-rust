@@ -79,6 +79,7 @@ const INFINITY: &str = "inf";
 const NEG_INFINITY: &str = "-inf";
 
 // A decimal floating-point number sig * pow(10, exp).
+// If exp is non_finite_exp then the number is a NaN or an infinity.
 #[allow(non_camel_case_types)]
 struct dec_fp {
     sig: i64, // significand
