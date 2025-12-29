@@ -81,7 +81,7 @@ const NEG_INFINITY: &str = "-inf";
 // A decimal floating-point number sig * pow(10, exp).
 #[allow(non_camel_case_types)]
 struct dec_fp {
-    sig: u64, // significand
+    sig: i64, // significand
     exp: i32, // exponent
 }
 
@@ -1137,8 +1137,8 @@ where
             ten.wrapping_sub(upper) > 1
         } {
             let round_up = upper >= ten;
-            let shorter = integral.into() - digit + u64::from(round_up) * 10;
-            let longer = integral.into() + u64::from(fractional >= HALF_ULP);
+            let shorter = (integral.into() - digit + u64::from(round_up) * 10) as i64;
+            let longer = (integral.into() + u64::from(fractional >= HALF_ULP)) as i64;
             let use_shorter = scaled_sig_mod10 <= scaled_half_ulp || round_up;
             return dec_fp {
                 #[cfg(zmij_no_select_unpredictable)]
@@ -1176,7 +1176,7 @@ where
     if (shorter << BOUND_SHIFT) >= lower {
         return normalize::<UInt>(
             dec_fp {
-                sig: shorter.into(),
+                sig: shorter.into() as i64,
                 exp: dec_exp,
             },
             subnormal,
@@ -1202,7 +1202,7 @@ where
     };
     normalize::<UInt>(
         dec_fp {
-            sig: dec_sig.into(),
+            sig: dec_sig.into() as i64,
             exp: dec_exp,
         },
         subnormal,
@@ -1256,7 +1256,7 @@ where
     let num_digits = Float::MAX_DIGITS10 as i32 - 2;
     let end = if Float::NUM_BITS == 64 {
         dec_exp += num_digits + i32::from(dec_sig >= 10_000_000_000_000_000);
-        unsafe { write_significand17(buffer.add(1), dec_sig) }
+        unsafe { write_significand17(buffer.add(1), dec_sig as u64) }
     } else {
         if dec_sig < 10_000_000 {
             dec_sig *= 10;
