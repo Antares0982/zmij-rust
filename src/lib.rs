@@ -778,15 +778,6 @@ where
     }
 }
 
-// Returns {value / 100, value % 100} correct for values of up to 4 digits.
-fn divmod100(value: u32) -> (u32, u32) {
-    debug_assert!(value < 10_000);
-    const EXP: u32 = 19; // 19 is faster or equal to 12 even for 3 digits.
-    const SIG: u32 = (1 << EXP) / 100 + 1;
-    let div = (value * SIG) >> EXP; // value / 100
-    (div, value - div * 100)
-}
-
 #[cfg_attr(feature = "no-panic", no_panic)]
 fn count_trailing_nonzeros(x: u64) -> usize {
     // We count the number of bytes until there are only zeros left.
@@ -1325,11 +1316,15 @@ where
     unsafe {
         buffer = buffer.add(usize::from(dec_exp >= 10));
     }
-    let (a, bb) = divmod100(dec_exp as u32);
+    const DIV_EXP: u32 = 19; // 19 is faster or equal to 12 even for 3 digits.
+    const DIV_SIG: u32 = (1 << DIV_EXP) / 100 + 1;
+    let a = (dec_exp as u32 * DIV_SIG) >> DIV_EXP; // value / 100
     unsafe {
         *buffer = b'0' + a as u8;
         buffer = buffer.add(usize::from(dec_exp >= 100));
-        buffer.cast::<u16>().write_unaligned(*digits2(bb as usize));
+        buffer
+            .cast::<u16>()
+            .write_unaligned(*digits2((dec_exp as u32 - a * 100) as usize));
         *sign_ptr = sign;
         buffer.add(2)
     }
