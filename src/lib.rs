@@ -1317,7 +1317,8 @@ where
         buffer = buffer.add(usize::from(dec_exp >= 10));
     }
     if Float::MIN_10_EXP < -99 || Float::MAX_10_EXP > 99 {
-        const DIV_EXP: u32 = 19; // 19 is faster or equal to 12 even for 3 digits.
+        // 19 is faster or equal to 12 even for 3 digits.
+        const DIV_EXP: u32 = 19;
         const DIV_SIG: u32 = (1 << DIV_EXP) / 100 + 1;
         let a = (dec_exp as u32 * DIV_SIG) >> DIV_EXP; // value / 100
         unsafe {
