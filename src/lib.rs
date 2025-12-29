@@ -84,6 +84,43 @@ struct uint128 {
     lo: u64,
 }
 
+trait FloatTraits: traits::Float {
+    const NUM_BITS: i32;
+    const NUM_SIG_BITS: i32 = Self::MANTISSA_DIGITS as i32 - 1;
+    const NUM_EXP_BITS: i32 = Self::NUM_BITS - Self::NUM_SIG_BITS - 1;
+    const EXP_MASK: i32 = (1 << Self::NUM_EXP_BITS) - 1;
+    const EXP_BIAS: i32 = (1 << (Self::NUM_EXP_BITS - 1)) - 1;
+    const IMPLICIT_BIT: Self::UInt;
+
+    fn to_bits(self) -> Self::UInt;
+
+    fn get_sig(bits: Self::UInt) -> Self::UInt {
+        bits & (Self::IMPLICIT_BIT - Self::UInt::from(1))
+    }
+
+    fn get_exp(bits: Self::UInt) -> i32 {
+        (bits >> Self::NUM_SIG_BITS).into() as i32 & Self::EXP_MASK
+    }
+}
+
+impl FloatTraits for f32 {
+    const NUM_BITS: i32 = 32;
+    const IMPLICIT_BIT: u32 = 1 << Self::NUM_SIG_BITS;
+
+    fn to_bits(self) -> Self::UInt {
+        self.to_bits()
+    }
+}
+
+impl FloatTraits for f64 {
+    const NUM_BITS: i32 = 64;
+    const IMPLICIT_BIT: u64 = 1 << Self::NUM_SIG_BITS;
+
+    fn to_bits(self) -> Self::UInt {
+        self.to_bits()
+    }
+}
+
 // 128-bit significands of powers of 10 rounded down.
 // Generated with gen-pow10/main.rs.
 const DEC_EXP_MIN: i32 = -292;
@@ -1180,25 +1217,6 @@ where
     )
 }
 
-trait FloatTraits: traits::Float {
-    const NUM_BITS: i32;
-    const NUM_SIG_BITS: i32 = Self::MANTISSA_DIGITS as i32 - 1;
-    const NUM_EXP_BITS: i32 = Self::NUM_BITS - Self::NUM_SIG_BITS - 1;
-    const EXP_MASK: i32 = (1 << Self::NUM_EXP_BITS) - 1;
-    const EXP_BIAS: i32 = (1 << (Self::NUM_EXP_BITS - 1)) - 1;
-    const IMPLICIT_BIT: Self::UInt;
-}
-
-impl FloatTraits for f32 {
-    const NUM_BITS: i32 = 32;
-    const IMPLICIT_BIT: u32 = 1 << Self::NUM_SIG_BITS;
-}
-
-impl FloatTraits for f64 {
-    const NUM_BITS: i32 = 64;
-    const IMPLICIT_BIT: u64 = 1 << Self::NUM_SIG_BITS;
-}
-
 /// Writes the shortest correctly rounded decimal representation of `value` to
 /// `buffer`. `buffer` should point to a buffer of size `buffer_size` or larger.
 #[cfg_attr(feature = "no-panic", no_panic)]
@@ -1213,10 +1231,10 @@ where
         buffer = buffer.add((bits >> (Float::NUM_BITS - 1)).into() as usize);
     }
 
-    let mut bin_sig = bits & (Float::IMPLICIT_BIT - Float::UInt::from(1)); // binary significand
+    let mut bin_sig = Float::get_sig(bits); // binary significand
     let mut regular = bin_sig != Float::UInt::from(0);
 
-    let mut bin_exp = (bits >> Float::NUM_SIG_BITS).into() as i32 & Float::EXP_MASK; // binary exponent
+    let mut bin_exp = Float::get_exp(bits); // binary exponent
     let mut subnormal = false;
     if bin_exp == 0 {
         if bin_sig == Float::UInt::from(0) {
@@ -1238,10 +1256,13 @@ where
     bin_sig ^= Float::IMPLICIT_BIT;
     bin_exp -= Float::NUM_SIG_BITS + Float::EXP_BIAS;
 
+    // Here be 🐉s.
     let fp {
         sig: mut dec_sig,
         exp: mut dec_exp,
     } = to_decimal(bin_sig, bin_exp, regular, subnormal);
+
+    // Write significand.
     let num_digits = Float::MAX_DIGITS10 as i32 - 2;
     let end = if Float::NUM_BITS == 64 {
         dec_exp += num_digits + i32::from(dec_sig >= 10_000_000_000_000_000);
@@ -1291,6 +1312,10 @@ where
         *buffer = *buffer.add(1);
         *buffer.add(1) = b'.';
         buffer = buffer.add(length + usize::from(length > 1));
+    }
+
+    // Write exponent.
+    unsafe {
         *buffer = b'e';
         buffer = buffer.add(1);
     }

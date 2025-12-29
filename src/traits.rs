@@ -5,25 +5,18 @@ pub trait Float: Copy {
     type UInt: UInt;
     const MANTISSA_DIGITS: u32;
     const MAX_DIGITS10: u32;
-    fn to_bits(self) -> Self::UInt;
 }
 
 impl Float for f32 {
     type UInt = u32;
     const MANTISSA_DIGITS: u32 = Self::MANTISSA_DIGITS;
     const MAX_DIGITS10: u32 = 9;
-    fn to_bits(self) -> Self::UInt {
-        self.to_bits()
-    }
 }
 
 impl Float for f64 {
     type UInt = u64;
     const MANTISSA_DIGITS: u32 = Self::MANTISSA_DIGITS;
     const MAX_DIGITS10: u32 = 17;
-    fn to_bits(self) -> Self::UInt {
-        self.to_bits()
-    }
 }
 
 pub trait UInt:
