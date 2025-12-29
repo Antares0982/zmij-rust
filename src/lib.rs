@@ -97,6 +97,8 @@ trait FloatTraits: traits::Float {
     const NUM_EXP_BITS: i32 = Self::NUM_BITS - Self::NUM_SIG_BITS - 1;
     const EXP_MASK: i32 = (1 << Self::NUM_EXP_BITS) - 1;
     const EXP_BIAS: i32 = (1 << (Self::NUM_EXP_BITS - 1)) - 1;
+
+    type UInt: traits::UInt;
     const IMPLICIT_BIT: Self::UInt;
 
     fn to_bits(self) -> Self::UInt;
@@ -114,6 +116,8 @@ impl FloatTraits for f32 {
     const NUM_BITS: i32 = 32;
     const IMPLICIT_BIT: u32 = 1 << Self::NUM_SIG_BITS;
 
+    type UInt = u32;
+
     fn to_bits(self) -> Self::UInt {
         self.to_bits()
     }
@@ -122,6 +126,8 @@ impl FloatTraits for f32 {
 impl FloatTraits for f64 {
     const NUM_BITS: i32 = 64;
     const IMPLICIT_BIT: u64 = 1 << Self::NUM_SIG_BITS;
+
+    type UInt = u64;
 
     fn to_bits(self) -> Self::UInt {
         self.to_bits()
