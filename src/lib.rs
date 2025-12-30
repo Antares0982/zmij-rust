@@ -1115,6 +1115,19 @@ where
             integral = UInt::truncate((result >> 64) as u64);
             fractional = result as u64;
         }
+        #[cfg(all(any(target_arch = "aarch64", target_arch = "x86_64"), not(miri)))]
+        let digit = {
+            use core::arch::asm;
+            // An optimization of integral % 10 by Dougall Johnson. Relies on
+            // range calculation: (max_bin_sig << max_exp_shift) * max_u128.
+            let div10 = ((u128::from(integral.into()) * 0x199999999999999a) >> 64) as u64;
+            let mut digit = integral.into() - div10 * 10;
+            unsafe {
+                asm!("/*{0}*/", inout(reg) digit); // or it narrows to 32-bit and doesn't use madd/msub
+            }
+            digit
+        };
+        #[cfg(not(all(any(target_arch = "aarch64", target_arch = "x86_64"), not(miri))))]
         let digit = integral.into() % 10;
 
         // Switch to a fixed-point representation with the least significant
@@ -1312,17 +1325,16 @@ where
     }
 
     // Write exponent.
-    unsafe {
-        *buffer = b'e';
-        buffer = buffer.add(1);
-    }
     let sign_ptr = buffer;
-    let sign = b'-'.wrapping_add(u8::from(dec_exp >= 0) * b'+'.wrapping_sub(b'-'));
+    let e_sign = if dec_exp >= 0 {
+        ((b'+' as u16) << 8) | b'e' as u16
+    } else {
+        ((b'-' as u16) << 8) | b'e' as u16
+    };
+    buffer = unsafe { buffer.add(1) };
     let mask = i32::from(dec_exp >= 0) - 1;
     dec_exp = (dec_exp + mask) ^ mask; // absolute value
-    unsafe {
-        buffer = buffer.add(usize::from(dec_exp >= 10));
-    }
+    buffer = unsafe { buffer.add(usize::from(dec_exp >= 10)) };
     if Float::MIN_10_EXP < -99 || Float::MAX_10_EXP > 99 {
         // 19 is faster or equal to 12 even for 3 digits.
         const DIV_EXP: u32 = 19;
@@ -1338,7 +1350,7 @@ where
         buffer
             .cast::<u16>()
             .write_unaligned(*digits2(dec_exp as usize));
-        *sign_ptr = sign;
+        sign_ptr.cast::<u16>().write_unaligned(e_sign);
         buffer.add(2)
     }
 }
