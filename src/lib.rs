@@ -681,7 +681,7 @@ where
     let bits = value.to_bits();
     let raw_exp = Float::get_exp(bits); // binary exponent
     let mut bin_exp = raw_exp - Float::NUM_SIG_BITS - Float::EXP_BIAS;
-    // Compute decimal exponent as early as possible.
+    // Compute the decimal exponent early to overlap its latency with other work.
     let mut dec_exp = compute_dec_exp(bin_exp, true);
 
     unsafe {
