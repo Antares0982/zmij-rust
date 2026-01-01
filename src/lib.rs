@@ -718,7 +718,6 @@ where
             };
         }
         bin_exp = 1 - Float::NUM_SIG_BITS - Float::EXP_BIAS;
-        dec_exp = compute_dec_exp(bin_exp, true);
         bin_sig |= Float::IMPLICIT_BIT;
         // Setting regular is not redundant: it has a measurable perf impact.
         regular = true;
