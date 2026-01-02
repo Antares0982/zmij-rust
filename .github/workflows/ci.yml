@@ -83,6 +83,9 @@ jobs:
           targets: aarch64-unknown-linux-gnu
       - run: cargo clippy --tests --benches -- -Dclippy::all -Dclippy::pedantic
       - run: cargo clippy --target=aarch64-unknown-linux-gnu -- -Dclippy::all -Dclippy::pedantic
+      - run: cargo clippy -- -Dclippy::all -Dclippy::pedantic
+        env:
+          RUSTFLAGS: ${{env.RUSTFLAGS}} -Ctarget-cpu=native
 
   miri:
     name: Miri (${{matrix.name}})
