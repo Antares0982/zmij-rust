@@ -612,19 +612,14 @@ where
 // Converts a binary FP number bin_sig * 2**bin_exp to the shortest decimal
 // representation.
 #[cfg_attr(feature = "no-panic", no_panic)]
-fn to_decimal<UInt>(
-    bin_sig: UInt,
-    bin_exp: i32,
-    mut dec_exp: i32,
-    regular: bool,
-    subnormal: bool,
-) -> dec_fp
+fn to_decimal<UInt>(bin_sig: UInt, bin_exp: i32, regular: bool, subnormal: bool) -> dec_fp
 where
     UInt: traits::UInt,
 {
     let num_bits = mem::size_of::<UInt>() as i32 * 8;
     // An optimization from yy by Yaoyuan Guo:
     while regular && !subnormal {
+        let dec_exp = compute_dec_exp(bin_exp, true);
         let exp_shift = compute_exp_shift(bin_exp, dec_exp);
         let pow10 = unsafe { POW10_SIGNIFICANDS.get_unchecked(-dec_exp) };
 
@@ -717,7 +712,7 @@ where
         break;
     }
 
-    dec_exp = compute_dec_exp(bin_exp, regular);
+    let dec_exp = compute_dec_exp(bin_exp, regular);
     let exp_shift = compute_exp_shift(bin_exp, dec_exp);
     let mut pow10 = unsafe { POW10_SIGNIFICANDS.get_unchecked(-dec_exp) };
 
@@ -790,8 +785,6 @@ where
     let bits = value.to_bits();
     let raw_exp = Float::get_exp(bits); // binary exponent
     let mut bin_exp = raw_exp - Float::NUM_SIG_BITS - Float::EXP_BIAS;
-    // Compute the decimal exponent early to overlap its latency with other work.
-    let mut dec_exp = compute_dec_exp(bin_exp, true);
 
     unsafe {
         *buffer = b'-';
@@ -818,8 +811,8 @@ where
     bin_sig ^= Float::IMPLICIT_BIT;
 
     // Here be 🐉s.
-    let mut dec = to_decimal(bin_sig, bin_exp, dec_exp, regular, special);
-    dec_exp = dec.exp;
+    let mut dec = to_decimal(bin_sig, bin_exp, regular, special);
+    let mut dec_exp = dec.exp;
 
     // Write significand.
     let end = if Float::NUM_BITS == 64 {
