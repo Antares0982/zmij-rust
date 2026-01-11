@@ -61,6 +61,7 @@
     clippy::too_many_arguments,
     clippy::too_many_lines,
     clippy::unreadable_literal,
+    clippy::used_underscore_items,
     clippy::while_immutable_condition,
     clippy::wildcard_imports
 )]
