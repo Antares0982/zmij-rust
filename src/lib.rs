@@ -657,7 +657,7 @@ where
 }
 
 // Converts a binary FP number bin_sig * 2**bin_exp to the shortest decimal
-// representation.
+// representation, where bin_exp = raw_exp - num_sig_bits - exp_bias.
 #[cfg_attr(feature = "no-panic", no_panic)]
 fn to_decimal<Float, UInt>(bin_sig: UInt, raw_exp: i32, regular: bool, subnormal: bool) -> dec_fp
 where
