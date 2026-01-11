@@ -833,15 +833,15 @@ where
     Float: FloatTraits,
 {
     let bits = value.to_bits();
-    // It is beneficial to compute exponent early.
+    // It is beneficial to extract exponent and significand early.
     let bin_exp = Float::get_exp(bits); // binary exponent
+    let mut bin_sig = Float::get_sig(bits); // binary significand
 
     unsafe {
         *buffer = b'-';
     }
     buffer = unsafe { buffer.add(usize::from(Float::is_negative(bits))) };
 
-    let mut bin_sig = Float::get_sig(bits); // binary significand
     let special = bin_exp == 0;
     let regular = (bin_sig != Float::SigType::from(0)) | special; // | special slightly improves perf.
     if special {
