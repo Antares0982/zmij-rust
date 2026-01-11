@@ -364,12 +364,12 @@ where
 {
     let num_bits = mem::size_of::<UInt>() * 8;
     if num_bits == 64 && ExpShiftTable::ENABLE && regular {
-        (unsafe {
+        i32::from(unsafe {
             *EXP_SHIFTS
                 .data
                 .as_ptr()
                 .add((bin_exp + ExpShiftTable::OFFSET) as usize)
-        }) as i32
+        })
     } else {
         do_compute_exp_shift(bin_exp, dec_exp)
     }
