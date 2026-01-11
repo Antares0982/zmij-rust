@@ -423,8 +423,10 @@ unsafe fn digits2(value: usize) -> &'static u16 {
 
 const DIV10K_EXP: i32 = 40;
 const DIV10K_SIG: u32 = ((1u64 << DIV10K_EXP) / 10000 + 1) as u32;
+const NEG10K: u32 = ((1u64 << 32) - 10000) as u32;
 const DIV100_EXP: i32 = 19;
 const DIV100_SIG: u32 = (1 << DIV100_EXP) / 100 + 1;
+const NEG100: u32 = (1 << 16) - 100;
 
 const ZEROS: u64 = 0x0101010101010101 * b'0' as u64;
 
@@ -438,9 +440,9 @@ fn to_bcd8(abcdefgh: u64) -> u64 {
     // where the division on the RHS is implemented by the usual multiply + shift
     // trick and the fractional bits are masked away.
     let abcd_efgh =
-        abcdefgh + (0x100000000 - 10000) * ((abcdefgh * u64::from(DIV10K_SIG)) >> DIV10K_EXP);
+        abcdefgh + u64::from(NEG10K) * ((abcdefgh * u64::from(DIV10K_SIG)) >> DIV10K_EXP);
     let ab_cd_ef_gh = abcd_efgh
-        + (0x10000 - 100) * (((abcd_efgh * u64::from(DIV100_SIG)) >> DIV100_EXP) & 0x7f0000007f);
+        + u64::from(NEG100) * (((abcd_efgh * u64::from(DIV100_SIG)) >> DIV100_EXP) & 0x7f0000007f);
     let a_b_c_d_e_f_g_h =
         ab_cd_ef_gh + (0x100 - 10) * (((ab_cd_ef_gh * 0x67) >> 10) & 0xf000f000f000f);
     a_b_c_d_e_f_g_h.to_be()
@@ -575,31 +577,31 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
             divmod100: __m128i,
             div10: __m128i,
             #[cfg(target_feature = "sse4.1")]
-            divmod10: __m128i,
+            neg10: __m128i,
             #[cfg(target_feature = "sse4.1")]
             bswap: __m128i,
             #[cfg(not(target_feature = "sse4.1"))]
-            one_hundred: __m128i,
+            hundred: __m128i,
             #[cfg(not(target_feature = "sse4.1"))]
             moddiv10: __m128i,
-            ascii0: __m128i,
+            zeros: __m128i,
         }
 
         static C: C = C {
             div10k: _mm_set1_epi64x(DIV10K_SIG as i64),
-            divmod10k: _mm_set1_epi64x((1 << 32) - 10000),
+            divmod10k: _mm_set1_epi64x(NEG10K as i64),
             div100: _mm_set1_epi32(DIV100_SIG as i32),
-            divmod100: _mm_set1_epi32((1 << 16) - 100),
+            divmod100: _mm_set1_epi32(NEG100 as i32),
             div10: _mm_set1_epi16(((1i32 << 16) / 10 + 1) as i16),
             #[cfg(target_feature = "sse4.1")]
-            divmod10: _mm_set1_epi16((1 << 8) - 10),
+            neg10: _mm_set1_epi16((1 << 8) - 10),
             #[cfg(target_feature = "sse4.1")]
             bswap: _mm_set_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
             #[cfg(not(target_feature = "sse4.1"))]
-            one_hundred: _mm_set1_epi32(100),
+            hundred: _mm_set1_epi32(100),
             #[cfg(not(target_feature = "sse4.1"))]
             moddiv10: _mm_set1_epi16(10 * (1 << 8) - 1),
-            ascii0: _mm_set1_epi64x(ZEROS as i64),
+            zeros: _mm_set1_epi64x(ZEROS as i64),
         };
 
         // The BCD sequences are based on ones provided by Xiang JunBo.
@@ -621,7 +623,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
                     _mm_mullo_epi32(C.divmod100, _mm_srli_epi32(_mm_mulhi_epu16(y, C.div100), 3)),
                 );
                 let big_endian_bcd: __m128i =
-                    _mm_add_epi64(z, _mm_mullo_epi16(C.divmod10, _mm_mulhi_epu16(z, C.div10)));
+                    _mm_add_epi64(z, _mm_mullo_epi16(C.neg10, _mm_mulhi_epu16(z, C.div10)));
                 // SSSE3
                 _mm_shuffle_epi8(big_endian_bcd, C.bswap)
             };
@@ -629,8 +631,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
             #[cfg(not(target_feature = "sse4.1"))]
             let bcd: __m128i = {
                 let y_div_100: __m128i = _mm_srli_epi16(_mm_mulhi_epu16(y, C.div100), 3);
-                let y_mod_100: __m128i =
-                    _mm_sub_epi16(y, _mm_mullo_epi16(y_div_100, C.one_hundred));
+                let y_mod_100: __m128i = _mm_sub_epi16(y, _mm_mullo_epi16(y_div_100, C.hundred));
                 let z: __m128i = _mm_or_si128(_mm_slli_epi32(y_mod_100, 16), y_div_100);
                 let bcd_shuffled: __m128i = _mm_sub_epi16(
                     _mm_slli_epi16(z, 8),
@@ -639,7 +640,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
                 _mm_shuffle_epi32(bcd_shuffled, _MM_SHUFFLE(0, 1, 2, 3))
             };
 
-            let digits = _mm_or_si128(bcd, C.ascii0);
+            let digits = _mm_or_si128(bcd, C.zeros);
 
             // determine number of leading zeros
             let mask128: __m128i = _mm_cmpgt_epi8(bcd, _mm_setzero_si128());
