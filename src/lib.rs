@@ -739,26 +739,27 @@ where
         // s - shorter underestimate, S - shorter overestimate
         // l - longer underestimate,  L - longer overestimate
 
-        if {
-            // Boundary case when rounding down to nearest 10.
-            scaled_sig_mod10 != scaled_half_ulp &&
-            // Near-boundary case when rounding up to nearest 10.
-            // Case where upper != ten is insufficient: 1.342178e+08f.
-            ten.wrapping_sub(upper) > 1 // upper != ten && upper != ten - 1
-        } {
-            let round_up = upper >= ten;
-            let shorter = (integral.into() - digit + u64::from(round_up) * 10) as i64;
-            let longer = (integral.into() + u64::from(fractional >= HALF_ULP)) as i64;
-            let use_shorter = scaled_sig_mod10 <= scaled_half_ulp || round_up;
-            return dec_fp {
-                #[cfg(zmij_no_select_unpredictable)]
-                sig: if use_shorter { shorter } else { longer },
-                #[cfg(not(zmij_no_select_unpredictable))]
-                sig: hint::select_unpredictable(use_shorter, shorter, longer),
-                exp: dec_exp,
-            };
+        // Check for boundary case when rounding down to nearest 10 and
+        // near-boundary case when rounding up to nearest 10.
+        if scaled_sig_mod10 == scaled_half_ulp
+            // Case where upper == ten is insufficient: 1.342178e+08f.
+            // upper == ten || upper == ten - 1
+            || ten.wrapping_sub(upper) <= 1
+        {
+            break;
         }
-        break;
+
+        let round_up = upper >= ten;
+        let shorter = (integral.into() - digit + u64::from(round_up) * 10) as i64;
+        let longer = (integral.into() + u64::from(fractional >= HALF_ULP)) as i64;
+        let use_shorter = scaled_sig_mod10 <= scaled_half_ulp || round_up;
+        return dec_fp {
+            #[cfg(zmij_no_select_unpredictable)]
+            sig: if use_shorter { shorter } else { longer },
+            #[cfg(not(zmij_no_select_unpredictable))]
+            sig: hint::select_unpredictable(use_shorter, shorter, longer),
+            exp: dec_exp,
+        };
     }
     bin_exp += i32::from(subnormal);
 
