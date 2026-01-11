@@ -452,10 +452,10 @@ fn to_bcd8(abcdefgh: u64) -> u64 {
     a_b_c_d_e_f_g_h.to_be()
 }
 
-unsafe fn write_if_nonzero(buffer: *mut u8, digit: u32) -> *mut u8 {
+unsafe fn write_if(buffer: *mut u8, digit: u32, condition: bool) -> *mut u8 {
     unsafe {
         *buffer = b'0' + digit as u8;
-        buffer.add(usize::from(digit != 0))
+        buffer.add(usize::from(condition))
     }
 }
 
@@ -468,7 +468,7 @@ unsafe fn write8(buffer: *mut u8, value: u64) {
 // Writes a significand consisting of up to 17 decimal digits (16-17 for
 // normals) and removes trailing zeros.
 #[cfg_attr(feature = "no-panic", no_panic)]
-unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
+unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool) -> *mut u8 {
     #[cfg(all(target_arch = "aarch64", target_feature = "neon", not(miri)))]
     {
         // An optimized version for NEON by Dougall Johnson.
@@ -525,7 +525,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
         let a = (umul128(abbccddee, c.mul_const) >> 90) as u64;
         let bbccddee = abbccddee - a * hundred_million;
 
-        buffer = unsafe { write_if_nonzero(buffer, a as u32) };
+        buffer = unsafe { write_if(buffer, a as u32, has17digits) };
 
         unsafe {
             let ffgghhii_bbccddee_64: uint64x1_t =
@@ -593,7 +593,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
         let a = abbccddee / 100_000_000;
         let bbccddee = abbccddee % 100_000_000;
 
-        buffer = unsafe { write_if_nonzero(buffer, a) };
+        buffer = unsafe { write_if(buffer, a, has17digits) };
 
         #[repr(C, align(64))]
         struct C {
@@ -686,7 +686,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
         // Each digits is denoted by a letter so value is abbccddeeffgghhii.
         let abbccddee = (value / 100_000_000) as u32;
         let ffgghhii = (value % 100_000_000) as u32;
-        buffer = unsafe { write_if_nonzero(buffer, abbccddee / 100_000_000) };
+        buffer = unsafe { write_if(buffer, abbccddee / 100_000_000, has17digits) };
         let bcd = to_bcd8(u64::from(abbccddee % 100_000_000));
         unsafe {
             write8(buffer, bcd | ZEROS);
@@ -705,8 +705,8 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64) -> *mut u8 {
 // Writes a significand consisting of up to 9 decimal digits (8-9 for normals)
 // and removes trailing zeros.
 #[cfg_attr(feature = "no-panic", no_panic)]
-unsafe fn write_significand9(mut buffer: *mut u8, value: u32) -> *mut u8 {
-    buffer = unsafe { write_if_nonzero(buffer, value / 100_000_000) };
+unsafe fn write_significand9(mut buffer: *mut u8, value: u32, has9digits: bool) -> *mut u8 {
+    buffer = unsafe { write_if(buffer, value / 100_000_000, has9digits) };
     let bcd = to_bcd8(u64::from(value % 100_000_000));
     unsafe {
         write8(buffer, bcd | ZEROS);
@@ -943,15 +943,17 @@ where
 
     // Write significand.
     let end = if Float::NUM_BITS == 64 {
-        dec_exp += Float::MAX_DIGITS10 as i32 + i32::from(dec.sig >= 10_000_000_000_000_000) - 2;
-        unsafe { write_significand17(buffer.add(1), dec.sig as u64) }
+        let has17digits = dec.sig >= 10_000_000_000_000_000;
+        dec_exp += Float::MAX_DIGITS10 as i32 - 2 + i32::from(has17digits);
+        unsafe { write_significand17(buffer.add(1), dec.sig as u64, has17digits) }
     } else {
         if dec.sig < 10_000_000 {
             dec.sig *= 10;
             dec_exp -= 1;
         }
-        dec_exp += Float::MAX_DIGITS10 as i32 + i32::from(dec.sig >= 100_000_000) - 2;
-        unsafe { write_significand9(buffer.add(1), dec.sig as u32) }
+        let has9digits = dec.sig >= 100_000_000;
+        dec_exp += Float::MAX_DIGITS10 as i32 - 2 + i32::from(has9digits);
+        unsafe { write_significand9(buffer.add(1), dec.sig as u32, has9digits) }
     };
 
     let length = unsafe { end.offset_from(buffer.add(1)) } as usize;
