@@ -300,7 +300,7 @@ const fn compute_dec_exp(bin_exp: i32, regular: bool) -> i32 {
     (bin_exp * LOG10_2_SIG - !regular as i32 * LOG10_3_OVER_4_SIG) >> LOG10_2_EXP
 }
 
-const fn do_compute_exp_shift(bin_exp: i32, dec_exp: i32) -> i32 {
+const fn do_compute_exp_shift(bin_exp: i32, dec_exp: i32) -> u8 {
     debug_assert!(dec_exp >= -350 && dec_exp <= 350);
     // log2_pow10_sig = round(log2(10) * 2**log2_pow10_exp) + 1
     const LOG2_POW10_SIG: i32 = 217_707;
@@ -308,7 +308,7 @@ const fn do_compute_exp_shift(bin_exp: i32, dec_exp: i32) -> i32 {
     // pow10_bin_exp = floor(log2(10**-dec_exp))
     let pow10_bin_exp = (-dec_exp * LOG2_POW10_SIG) >> LOG2_POW10_EXP;
     // pow10 = ((pow10_hi << 64) | pow10_lo) * 2**(pow10_bin_exp - 127)
-    bin_exp + pow10_bin_exp + 1
+    (bin_exp + pow10_bin_exp + 1) as u8
 }
 
 struct ExpShiftTable {
@@ -358,18 +358,18 @@ static EXP_SHIFTS: ExpShiftTable = {
 // 10^dec_exp puts the decimal point in different bit positions:
 //   3 * 2**59 / 100 = 1.72...e+16  (needs shift = 1 + 1)
 //   3 * 2**60 / 100 = 3.45...e+16  (needs shift = 2 + 1)
-unsafe fn compute_exp_shift<UInt>(bin_exp: i32, dec_exp: i32, regular: bool) -> i32
+unsafe fn compute_exp_shift<UInt>(bin_exp: i32, dec_exp: i32, regular: bool) -> u8
 where
     UInt: traits::UInt,
 {
     let num_bits = mem::size_of::<UInt>() * 8;
     if num_bits == 64 && ExpShiftTable::ENABLE && regular {
-        i32::from(unsafe {
+        unsafe {
             *EXP_SHIFTS
                 .data
                 .as_ptr()
                 .add((bin_exp + ExpShiftTable::OFFSET) as usize)
-        })
+        }
     } else {
         do_compute_exp_shift(bin_exp, dec_exp)
     }
