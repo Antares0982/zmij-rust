@@ -157,8 +157,8 @@ trait FloatTraits: traits::Float {
         bits & (Self::IMPLICIT_BIT - Self::SigType::from(1))
     }
 
-    fn get_exp(bits: Self::SigType) -> i32 {
-        (bits >> Self::NUM_SIG_BITS).into() as i32 & Self::EXP_MASK
+    fn get_exp(bits: Self::SigType) -> i64 {
+        (bits >> Self::NUM_SIG_BITS).into() as i64 & i64::from(Self::EXP_MASK)
     }
 }
 
@@ -738,17 +738,21 @@ where
 // Converts a binary FP number bin_sig * 2**bin_exp to the shortest decimal
 // representation, where bin_exp = raw_exp - num_sig_bits - exp_bias.
 #[cfg_attr(feature = "no-panic", no_panic)]
-fn to_decimal<Float, UInt>(bin_sig: UInt, raw_exp: i32, regular: bool, subnormal: bool) -> dec_fp
+fn to_decimal<Float, UInt>(bin_sig: UInt, raw_exp: i64, regular: bool, subnormal: bool) -> dec_fp
 where
     Float: FloatTraits,
     UInt: traits::UInt,
 {
-    let mut bin_exp = raw_exp - Float::NUM_SIG_BITS - Float::EXP_BIAS;
+    let mut bin_exp = raw_exp - i64::from(Float::NUM_SIG_BITS) - i64::from(Float::EXP_BIAS);
     let num_bits = mem::size_of::<UInt>() as i32 * 8;
     // An optimization from yy by Yaoyuan Guo:
     while regular && !subnormal {
-        let dec_exp = compute_dec_exp(bin_exp, true);
-        let exp_shift = unsafe { compute_exp_shift::<UInt, true>(bin_exp, dec_exp) };
+        let dec_exp = if cfg!(target_vendor = "apple") {
+            ((bin_exp as u128 * 0x4d10500000000000) >> 64) as i32
+        } else {
+            compute_dec_exp(bin_exp as i32, true)
+        };
+        let exp_shift = unsafe { compute_exp_shift::<UInt, true>(bin_exp as i32, dec_exp) };
         let pow10 = unsafe { POW10_SIGNIFICANDS.get_unchecked(-dec_exp) };
 
         let integral; // integral part of bin_sig * pow10
@@ -840,10 +844,10 @@ where
             exp: dec_exp,
         };
     }
-    bin_exp += i32::from(subnormal);
+    bin_exp += i64::from(subnormal);
 
-    let dec_exp = compute_dec_exp(bin_exp, regular);
-    let exp_shift = unsafe { compute_exp_shift::<UInt, false>(bin_exp, dec_exp) };
+    let dec_exp = compute_dec_exp(bin_exp as i32, regular);
+    let exp_shift = unsafe { compute_exp_shift::<UInt, false>(bin_exp as i32, dec_exp) };
     let mut pow10 = unsafe { POW10_SIGNIFICANDS.get_unchecked(-dec_exp) };
 
     // Fallback to Schubfach to guarantee correctness in boundary cases. This
@@ -922,9 +926,9 @@ where
     }
     buffer = unsafe { buffer.add(usize::from(Float::is_negative(bits))) };
 
-    let special = bin_exp == 0;
-    let regular = (bin_sig != Float::SigType::from(0)) | special; // | special slightly improves perf.
-    if special {
+    let regular = bin_sig != Float::SigType::from(0);
+    let subnormal = bin_exp == 0;
+    if bin_exp == 0 {
         if bin_sig == Float::SigType::from(0) {
             return unsafe {
                 *buffer = b'0';
@@ -938,7 +942,7 @@ where
     bin_sig ^= Float::IMPLICIT_BIT;
 
     // Here be 🐉s.
-    let mut dec = to_decimal::<Float, Float::SigType>(bin_sig, bin_exp, regular, special);
+    let mut dec = to_decimal::<Float, Float::SigType>(bin_sig, bin_exp, regular, subnormal);
     let mut dec_exp = dec.exp;
 
     // Write significand.
