@@ -621,9 +621,9 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool
         #[repr(C, align(64))]
         struct C {
             div10k: __m128i,
-            divmod10k: __m128i,
+            neg10k: __m128i,
             div100: __m128i,
-            divmod100: __m128i,
+            neg100: __m128i,
             div10: __m128i,
             #[cfg(target_feature = "sse4.1")]
             neg10: __m128i,
@@ -638,9 +638,9 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool
 
         static C: C = C {
             div10k: _mm_set1_epi64x(DIV10K_SIG as i64),
-            divmod10k: _mm_set1_epi64x(NEG10K as i64),
+            neg10k: _mm_set1_epi64x(NEG10K as i64),
             div100: _mm_set1_epi32(DIV100_SIG as i32),
-            divmod100: _mm_set1_epi32(NEG100 as i32),
+            neg100: _mm_set1_epi32(NEG100 as i32),
             div10: _mm_set1_epi16(((1i32 << 16) / 10 + 1) as i16),
             #[cfg(target_feature = "sse4.1")]
             neg10: _mm_set1_epi16((1 << 8) - 10),
@@ -659,7 +659,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool
             let y: __m128i = _mm_add_epi64(
                 x,
                 _mm_mul_epu32(
-                    C.divmod10k,
+                    C.neg10k,
                     _mm_srli_epi64(_mm_mul_epu32(x, C.div10k), DIV10K_EXP),
                 ),
             );
@@ -669,7 +669,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool
                 // _mm_mullo_epi32 is SSE 4.1
                 let z: __m128i = _mm_add_epi64(
                     y,
-                    _mm_mullo_epi32(C.divmod100, _mm_srli_epi32(_mm_mulhi_epu16(y, C.div100), 3)),
+                    _mm_mullo_epi32(C.neg100, _mm_srli_epi32(_mm_mulhi_epu16(y, C.div100), 3)),
                 );
                 let big_endian_bcd: __m128i =
                     _mm_add_epi64(z, _mm_mullo_epi16(C.neg10, _mm_mulhi_epu16(z, C.div10)));
