@@ -594,8 +594,8 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool
     {
         use crate::stdarch_x86::*;
 
-        // Divide by ten with a 64bit shift. Note that (1 << 63) / 5 == (1 << 64) / 10
-        // but doesn't need an intermediate int128.
+        // Divide by ten with a 64bit shift. Note that (1 << 63) / 5 == (1 <<
+        // 64) / 10 but doesn't need an intermediate int128.
         let digits_16 = if USE_UMUL128_HI64 {
             umul128_hi64((1 << 63) / 5 + 1, value)
         } else {
@@ -605,8 +605,8 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool
 
         // We always write 17 digits into the buffer, but the first one can be
         // zero. buffer points to the second place in the output buffer to allow
-        // for the insertion of the decimal point, and so we can use the first
-        // place as scratch.
+        // for the insertion of the decimal point, so we can use the first place
+        // as scratch.
         buffer = unsafe { buffer.add(usize::from(has17digits)) };
         unsafe {
             *buffer.add(16) = last_digit as u8 + b'0';
