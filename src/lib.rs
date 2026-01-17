@@ -799,7 +799,8 @@ where
         const HALF_ULP: u64 = 1 << 63;
 
         // Exact half-ulp tie when rounding to nearest integer.
-        if fractional == HALF_ULP {
+        let cmp = fractional.wrapping_sub(HALF_ULP) as i64;
+        if cmp == 0 {
             break;
         }
 
@@ -864,7 +865,7 @@ where
 
         let round_up = upper >= ten;
         let mut shorter = (integral.into() - digit) as i64;
-        let longer = (integral.into() + u64::from(fractional >= HALF_ULP)) as i64;
+        let longer = (integral.into() + u64::from(cmp >= 0)) as i64;
         if cfg!(target_arch = "aarch64") {
             // Faster version without ccmp.
             let dec_sig =
