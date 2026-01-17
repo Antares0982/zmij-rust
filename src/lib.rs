@@ -189,6 +189,7 @@ impl FloatTraits for f64 {
     }
 }
 
+#[repr(C, align(64))]
 struct Pow10SignificandsTable {
     data: [u64; Self::NUM_POW10 * 2],
 }
