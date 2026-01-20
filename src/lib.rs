@@ -93,13 +93,6 @@ const NAN: &str = "NaN";
 const INFINITY: &str = "inf";
 const NEG_INFINITY: &str = "-inf";
 
-// A decimal floating-point number sig * pow(10, exp).
-// If exp is non_finite_exp then the number is a NaN or an infinity.
-struct dec_fp {
-    sig: i64, // significand
-    exp: i32, // exponent
-}
-
 #[cfg_attr(test, derive(Debug, PartialEq))]
 struct uint128 {
     hi: u64,
@@ -440,7 +433,6 @@ const DIV10_EXP: i32 = 10;
 const DIV10_SIG: u32 = (1 << DIV10_EXP) / 10 + 1;
 const NEG10: u32 = (1 << 8) - 10;
 // (1 << 63) / 5 == (1 << 64) / 10 without an intermediate int128.
-#[cfg(all(any(target_arch = "aarch64", target_arch = "x86_64"), not(miri)))]
 const DIV10_SIG64: u64 = (1 << 63) / 5 + 1;
 
 const ZEROS: u64 = 0x0101010101010101 * b'0' as u64;
@@ -509,7 +501,12 @@ const fn pack8(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8) -> u64 {
 // buffer[1]. buffer[0] may contain '0' after this function if the significand
 // has length 16.
 #[cfg_attr(feature = "no-panic", no_panic)]
-unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool) -> *mut u8 {
+unsafe fn write_significand17(
+    mut buffer: *mut u8,
+    value: u64,
+    has17digits: bool,
+    #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))] value_div10: i64,
+) -> *mut u8 {
     #[cfg(not(any(
         all(target_arch = "aarch64", target_feature = "neon", not(miri)),
         all(target_arch = "x86_64", target_feature = "sse2", not(miri)),
@@ -655,11 +652,7 @@ unsafe fn write_significand17(mut buffer: *mut u8, value: u64, has17digits: bool
     {
         use crate::stdarch_x86::*;
 
-        let digits_16 = if USE_UMUL128_HI64 {
-            umul128_hi64(value, DIV10_SIG64)
-        } else {
-            value / 10
-        };
+        let digits_16 = value_div10 as u64;
         let last_digit = (value - digits_16 * 10) as u32;
 
         // We always write 17 digits into the buffer, but the first one can be
@@ -795,7 +788,14 @@ unsafe fn write_significand9(mut buffer: *mut u8, value: u32, has9digits: bool) 
     }
 }
 
-fn normalize<UInt>(mut dec: dec_fp, subnormal: bool) -> dec_fp
+struct ToDecimalResult {
+    sig: i64,
+    exp: i32,
+    #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+    sig_div10: i64,
+}
+
+fn normalize<UInt>(mut dec: ToDecimalResult, subnormal: bool) -> ToDecimalResult
 where
     UInt: traits::UInt,
 {
@@ -813,6 +813,10 @@ where
         dec.sig *= 10;
         dec.exp -= 1;
     }
+    #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+    {
+        dec.sig_div10 = dec.sig / 10;
+    }
     dec
 }
 
@@ -821,7 +825,7 @@ fn to_decimal_schubfach<const SUBNORMAL: bool, UInt>(
     bin_sig: UInt,
     bin_exp: i64,
     regular: bool,
-) -> dec_fp
+) -> ToDecimalResult
 where
     UInt: traits::UInt,
 {
@@ -852,15 +856,16 @@ where
 
     // The idea of using a single shorter candidate is by Cassio Neri.
     // It is less or equal to the upper bound by construction.
-    let shorter = UInt::from(10) * ((upper >> BOUND_SHIFT) / UInt::from(10));
+    let div10 = (upper >> BOUND_SHIFT) / UInt::from(10);
+    let shorter = div10 * UInt::from(10);
     if (shorter << BOUND_SHIFT) >= lower {
-        return normalize::<UInt>(
-            dec_fp {
-                sig: shorter.into() as i64,
-                exp: dec_exp,
-            },
-            SUBNORMAL,
-        );
+        let result = ToDecimalResult {
+            sig: shorter.into() as i64,
+            exp: dec_exp,
+            #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+            sig_div10: div10.into() as i64,
+        };
+        return normalize::<UInt>(result, SUBNORMAL);
     }
 
     let scaled_sig = umulhi_inexact_to_odd(pow10.hi, pow10.lo, bin_sig_shifted << exp_shift);
@@ -880,20 +885,20 @@ where
     } else {
         longer_above
     };
-    normalize::<UInt>(
-        dec_fp {
-            sig: dec_sig.into() as i64,
-            exp: dec_exp,
-        },
-        SUBNORMAL,
-    )
+    let result = ToDecimalResult {
+        sig: dec_sig.into() as i64,
+        exp: dec_exp,
+        #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+        sig_div10: (dec_sig / UInt::from(10)).into() as i64,
+    };
+    normalize::<UInt>(result, SUBNORMAL)
 }
 
 // Here be 🐉s.
 // Converts a binary FP number bin_sig * 2**bin_exp to the shortest decimal
 // representation, where bin_exp = raw_exp - exp_offset.
 #[cfg_attr(feature = "no-panic", no_panic)]
-fn to_decimal_normal<Float, UInt>(bin_sig: UInt, raw_exp: i64, regular: bool) -> dec_fp
+fn to_decimal_normal<Float, UInt>(bin_sig: UInt, raw_exp: i64, regular: bool) -> ToDecimalResult
 where
     Float: FloatTraits,
     UInt: traits::UInt,
@@ -929,19 +934,16 @@ where
             break;
         }
 
+        // An optimization of integral % 10 by Dougall Johnson. Relies on range
+        // calculation: (max_bin_sig << max_exp_shift) * max_u128.
+        let div10 = umul128_hi64(integral.into(), DIV10_SIG64);
+        #[allow(unused_mut)]
+        let mut digit = integral.into() - div10 * 10;
+        // or it narrows to 32-bit and doesn't use madd/msub
         #[cfg(all(any(target_arch = "aarch64", target_arch = "x86_64"), not(miri)))]
-        let digit = {
-            // An optimization of integral % 10 by Dougall Johnson. Relies on
-            // range calculation: (max_bin_sig << max_exp_shift) * max_u128.
-            let mut digit = integral.into() - umul128_hi64(integral.into(), DIV10_SIG64) * 10;
-            // or it narrows to 32-bit and doesn't use madd/msub
-            unsafe {
-                asm!("/*{0}*/", inout(reg) digit);
-            }
-            digit
-        };
-        #[cfg(not(all(any(target_arch = "aarch64", target_arch = "x86_64"), not(miri))))]
-        let digit = integral.into() % 10;
+        unsafe {
+            asm!("/*{0}*/", inout(reg) digit);
+        }
 
         // Switch to a fixed-point representation with the least significant
         // integral digit in the upper bits and fractional digits in the lower
@@ -995,16 +997,20 @@ where
             // Faster version without ccmp.
             let dec_sig =
                 hint::select_unpredictable(scaled_sig_mod10 < scaled_half_ulp, shorter, longer);
-            return dec_fp {
+            return ToDecimalResult {
                 sig: hint::select_unpredictable(round_up, shorter + 10, dec_sig),
                 exp: dec_exp,
+                #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+                sig_div10: 0,
             };
         }
         shorter += i64::from(round_up) * 10;
         let use_shorter = scaled_sig_mod10 <= scaled_half_ulp || round_up;
-        return dec_fp {
+        return ToDecimalResult {
             sig: hint::select_unpredictable(use_shorter, shorter, longer),
             exp: dec_exp,
+            #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+            sig_div10: div10 as i64 + i64::from(use_shorter) * i64::from(round_up),
         };
     }
     to_decimal_schubfach::<false, UInt>(bin_sig, bin_exp, regular)
@@ -1054,7 +1060,15 @@ where
     let end = if Float::NUM_BITS == 64 {
         let has17digits = dec.sig >= 10_000_000_000_000_000;
         dec_exp += Float::MAX_DIGITS10 as i32 - 2 + i32::from(has17digits);
-        unsafe { write_significand17(buffer, dec.sig as u64, has17digits) }
+        unsafe {
+            write_significand17(
+                buffer,
+                dec.sig as u64,
+                has17digits,
+                #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+                dec.sig_div10,
+            )
+        }
     } else {
         if dec.sig < 10_000_000 {
             dec.sig *= 10;
