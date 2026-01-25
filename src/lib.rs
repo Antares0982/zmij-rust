@@ -645,7 +645,7 @@ unsafe fn write_significand17(
         let ijklmnop = (value_div10 % 100_000_000) as u32;
 
         #[repr(C, align(64))]
-        struct Consts {
+        struct Constants {
             div10k: u128,
             neg10k: u128,
             div100: u128,
@@ -663,7 +663,7 @@ unsafe fn write_significand17(
             zeros: u128,
         }
 
-        impl Consts {
+        impl Constants {
             const fn splat64(x: u64) -> u128 {
                 ((x as u128) << 64) | x as u128
             }
@@ -689,40 +689,47 @@ unsafe fn write_significand17(
             }
         }
 
-        static CONSTS: Consts = Consts {
-            div10k: Consts::splat64(DIV10K_SIG as u64),
-            neg10k: Consts::splat64(NEG10K as u64),
-            div100: Consts::splat32(DIV100_SIG),
-            div10: Consts::splat16(((1u32 << 16) / 10 + 1) as u16),
+        static CONSTS: Constants = Constants {
+            div10k: Constants::splat64(DIV10K_SIG as u64),
+            neg10k: Constants::splat64(NEG10K as u64),
+            div100: Constants::splat32(DIV100_SIG),
+            div10: Constants::splat16(((1u32 << 16) / 10 + 1) as u16),
             #[cfg(target_feature = "sse4.1")]
-            neg100: Consts::splat32(NEG100),
+            neg100: Constants::splat32(NEG100),
             #[cfg(target_feature = "sse4.1")]
-            neg10: Consts::splat16((1 << 8) - 10),
+            neg10: Constants::splat16((1 << 8) - 10),
             #[cfg(target_feature = "sse4.1")]
-            bswap: Consts::pack8(15, 14, 13, 12, 11, 10, 9, 8) as u128
-                | (Consts::pack8(7, 6, 5, 4, 3, 2, 1, 0) as u128) << 64,
+            bswap: Constants::pack8(15, 14, 13, 12, 11, 10, 9, 8) as u128
+                | (Constants::pack8(7, 6, 5, 4, 3, 2, 1, 0) as u128) << 64,
             #[cfg(not(target_feature = "sse4.1"))]
-            hundred: Consts::splat32(100),
+            hundred: Constants::splat32(100),
             #[cfg(not(target_feature = "sse4.1"))]
-            moddiv10: Consts::splat16(10 * (1 << 8) - 1),
-            zeros: Consts::splat64(ZEROS),
+            moddiv10: Constants::splat16(10 * (1 << 8) - 1),
+            zeros: Constants::splat64(ZEROS),
         };
 
-        let div10k = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.div10k).cast::<__m128i>()) };
-        let neg10k = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.neg10k).cast::<__m128i>()) };
-        let div100 = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.div100).cast::<__m128i>()) };
-        let div10 = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.div10).cast::<__m128i>()) };
+        let mut c = ptr::addr_of!(CONSTS);
+        // Make the compiler forget where the constants came from to ensure they
+        // are loaded from memory.
+        unsafe {
+            asm!("/*{0}*/", inout(reg) c);
+        }
+
+        let div10k = unsafe { _mm_load_si128(ptr::addr_of!((*c).div10k).cast::<__m128i>()) };
+        let neg10k = unsafe { _mm_load_si128(ptr::addr_of!((*c).neg10k).cast::<__m128i>()) };
+        let div100 = unsafe { _mm_load_si128(ptr::addr_of!((*c).div100).cast::<__m128i>()) };
+        let div10 = unsafe { _mm_load_si128(ptr::addr_of!((*c).div10).cast::<__m128i>()) };
         #[cfg(target_feature = "sse4.1")]
-        let neg100 = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.neg100).cast::<__m128i>()) };
+        let neg100 = unsafe { _mm_load_si128(ptr::addr_of!((*c).neg100).cast::<__m128i>()) };
         #[cfg(target_feature = "sse4.1")]
-        let neg10 = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.neg10).cast::<__m128i>()) };
+        let neg10 = unsafe { _mm_load_si128(ptr::addr_of!((*c).neg10).cast::<__m128i>()) };
         #[cfg(target_feature = "sse4.1")]
-        let bswap = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.bswap).cast::<__m128i>()) };
+        let bswap = unsafe { _mm_load_si128(ptr::addr_of!((*c).bswap).cast::<__m128i>()) };
         #[cfg(not(target_feature = "sse4.1"))]
-        let hundred = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.hundred).cast::<__m128i>()) };
+        let hundred = unsafe { _mm_load_si128(ptr::addr_of!((*c).hundred).cast::<__m128i>()) };
         #[cfg(not(target_feature = "sse4.1"))]
-        let moddiv10 = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.moddiv10).cast::<__m128i>()) };
-        let zeros = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.zeros).cast::<__m128i>()) };
+        let moddiv10 = unsafe { _mm_load_si128(ptr::addr_of!((*c).moddiv10).cast::<__m128i>()) };
+        let zeros = unsafe { _mm_load_si128(ptr::addr_of!((*c).zeros).cast::<__m128i>()) };
 
         // The BCD sequences are based on the ones provided by Xiang JunBo.
         unsafe {
