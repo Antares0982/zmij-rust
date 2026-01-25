@@ -493,7 +493,7 @@ unsafe fn write_significand17(
     )))]
     {
         let start = unsafe { buffer.add(1) };
-        // Each digits is denoted by a letter so value is abbccddeeffgghhii.
+        // Digits/pairs of digits are denoted by letters: value = abbccddeeffgghhii.
         let abbccddee = (value / 100_000_000) as u32;
         let ffgghhii = (value % 100_000_000) as u32;
         buffer = unsafe { write_if(start, abbccddee / 100_000_000, has17digits) };
@@ -545,7 +545,7 @@ unsafe fn write_significand17(
         let mut c = ptr::addr_of!(CONSTANTS);
 
         // Compiler barrier, or clang doesn't load from memory and generates 15
-        // more instructions
+        // more instructions.
         let c = unsafe {
             asm!("/*{0}*/", inout(reg) c);
             &*c
@@ -726,7 +726,7 @@ unsafe fn write_significand17(
         let moddiv10 = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.moddiv10).cast::<__m128i>()) };
         let zeros = unsafe { _mm_load_si128(ptr::addr_of!(CONSTS.zeros).cast::<__m128i>()) };
 
-        // The BCD sequences are based on ones provided by Xiang JunBo.
+        // The BCD sequences are based on the ones provided by Xiang JunBo.
         unsafe {
             let x: __m128i = _mm_set_epi64x(i64::from(abcdefgh), i64::from(ijklmnop));
             let y: __m128i = _mm_add_epi64(
@@ -761,7 +761,7 @@ unsafe fn write_significand17(
 
             let digits = _mm_or_si128(bcd, zeros);
 
-            // determine number of leading zeros
+            // Count leading zeros.
             let mask128: __m128i = _mm_cmpgt_epi8(bcd, _mm_setzero_si128());
             let mask = _mm_movemask_epi8(mask128) as u32;
             // We don't need a zero-check here: if the mask were zero, either
