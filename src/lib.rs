@@ -1025,16 +1025,21 @@ where
         );
     }
     let mut dec_exp = dec.exp;
+    let threshold = if Float::NUM_BITS == 64 {
+        10_000_000_000_000_000
+    } else {
+        100_000_000
+    };
+    let extra_digit = dec.sig >= threshold;
+    dec_exp += Float::MAX_DIGITS10 as i32 - 2 + i32::from(extra_digit);
 
     // Write significand.
     let end = if Float::NUM_BITS == 64 {
-        let has17digits = dec.sig >= 10_000_000_000_000_000;
-        dec_exp += Float::MAX_DIGITS10 as i32 - 2 + i32::from(has17digits);
         unsafe {
             write_significand17(
                 buffer.add(1),
                 dec.sig as u64,
-                has17digits,
+                extra_digit,
                 #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
                 dec.sig_div10,
             )
@@ -1044,9 +1049,7 @@ where
             dec.sig *= 10;
             dec_exp -= 1;
         }
-        let has9digits = dec.sig >= 100_000_000;
-        dec_exp += Float::MAX_DIGITS10 as i32 - 2 + i32::from(has9digits);
-        unsafe { write_significand9(buffer.add(1), dec.sig as u32, has9digits) }
+        unsafe { write_significand9(buffer.add(1), dec.sig as u32, extra_digit) }
     };
 
     let length = unsafe { end.offset_from(buffer.add(1)) } as usize;
