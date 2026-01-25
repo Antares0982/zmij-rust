@@ -489,6 +489,18 @@ const fn pack8(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8) -> u64 {
         | a as u64
 }
 
+// Writes a significand consisting of up to 9 decimal digits (8-9 for normals)
+// and removes trailing zeros.
+#[cfg_attr(feature = "no-panic", no_panic)]
+unsafe fn write_significand9(mut buffer: *mut u8, value: u32, has9digits: bool) -> *mut u8 {
+    buffer = unsafe { write_if(buffer, value / 100_000_000, has9digits) };
+    let bcd = to_bcd8(u64::from(value % 100_000_000));
+    unsafe {
+        write8(buffer, bcd | ZEROS);
+        buffer.add(count_trailing_nonzeros(bcd))
+    }
+}
+
 // Writes a significand consisting of up to 17 decimal digits (16-17 for
 // normals) and removes trailing zeros. The significant digits start from
 // buffer[1]. buffer[0] may contain '0' after this function if the significand
@@ -761,18 +773,6 @@ unsafe fn write_significand17(
             _mm_storeu_si128(buffer.cast::<__m128i>(), digits);
             buffer.add(if last_digit != 0 { 17 } else { len })
         }
-    }
-}
-
-// Writes a significand consisting of up to 9 decimal digits (8-9 for normals)
-// and removes trailing zeros.
-#[cfg_attr(feature = "no-panic", no_panic)]
-unsafe fn write_significand9(mut buffer: *mut u8, value: u32, has9digits: bool) -> *mut u8 {
-    buffer = unsafe { write_if(buffer, value / 100_000_000, has9digits) };
-    let bcd = to_bcd8(u64::from(value % 100_000_000));
-    unsafe {
-        write8(buffer, bcd | ZEROS);
-        buffer.add(count_trailing_nonzeros(bcd))
     }
 }
 
