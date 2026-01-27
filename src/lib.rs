@@ -518,14 +518,15 @@ where
 
         const NEG10K: i32 = -10000 + 0x10000;
 
-        struct MulConstants {
+        #[repr(C, align(64))]
+        struct Consts {
             mul_const: u64,
             hundred_million: u64,
             multipliers32: int32x4_t,
             multipliers16: int16x8_t,
         }
 
-        static CONSTANTS: MulConstants = MulConstants {
+        static CONSTS: Consts = Consts {
             mul_const: 0xabcc77118461cefd,
             hundred_million: 100000000,
             multipliers32: unsafe {
@@ -541,7 +542,7 @@ where
             },
         };
 
-        let mut c = ptr::addr_of!(CONSTANTS);
+        let mut c = ptr::addr_of!(CONSTS);
 
         // Compiler barrier, or clang doesn't load from memory and generates 15
         // more instructions.
@@ -645,7 +646,7 @@ where
         let ijklmnop = (value_div10 % 100_000_000) as u32;
 
         #[repr(C, align(64))]
-        struct Constants {
+        struct Consts {
             div10k: u128,
             neg10k: u128,
             div100: u128,
@@ -663,7 +664,7 @@ where
             zeros: u128,
         }
 
-        impl Constants {
+        impl Consts {
             const fn splat64(x: u64) -> u128 {
                 ((x as u128) << 64) | x as u128
             }
@@ -689,28 +690,27 @@ where
             }
         }
 
-        static CONSTS: Constants = Constants {
-            div10k: Constants::splat64(DIV10K_SIG as u64),
-            neg10k: Constants::splat64(NEG10K as u64),
-            div100: Constants::splat32(DIV100_SIG),
-            div10: Constants::splat16(((1u32 << 16) / 10 + 1) as u16),
+        static CONSTS: Consts = Consts {
+            div10k: Consts::splat64(DIV10K_SIG as u64),
+            neg10k: Consts::splat64(NEG10K as u64),
+            div100: Consts::splat32(DIV100_SIG),
+            div10: Consts::splat16(((1u32 << 16) / 10 + 1) as u16),
             #[cfg(target_feature = "sse4.1")]
-            neg100: Constants::splat32(NEG100),
+            neg100: Consts::splat32(NEG100),
             #[cfg(target_feature = "sse4.1")]
-            neg10: Constants::splat16((1 << 8) - 10),
+            neg10: Consts::splat16((1 << 8) - 10),
             #[cfg(target_feature = "sse4.1")]
-            bswap: Constants::pack8(15, 14, 13, 12, 11, 10, 9, 8) as u128
-                | (Constants::pack8(7, 6, 5, 4, 3, 2, 1, 0) as u128) << 64,
+            bswap: Consts::pack8(15, 14, 13, 12, 11, 10, 9, 8) as u128
+                | (Consts::pack8(7, 6, 5, 4, 3, 2, 1, 0) as u128) << 64,
             #[cfg(not(target_feature = "sse4.1"))]
-            hundred: Constants::splat32(100),
+            hundred: Consts::splat32(100),
             #[cfg(not(target_feature = "sse4.1"))]
-            moddiv10: Constants::splat16(10 * (1 << 8) - 1),
-            zeros: Constants::splat64(ZEROS),
+            moddiv10: Consts::splat16(10 * (1 << 8) - 1),
+            zeros: Consts::splat64(ZEROS),
         };
 
         let mut c = ptr::addr_of!(CONSTS);
-        // Make the compiler forget where the constants came from to ensure they
-        // are loaded from memory.
+        // Load constants from memory.
         unsafe {
             asm!("/*{0}*/", inout(reg) c);
         }
