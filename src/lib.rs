@@ -464,29 +464,29 @@ unsafe fn write8(buffer: *mut u8, value: u64) {
     }
 }
 
-// Writes a significand consisting of up to 9 decimal digits (8-9 for normals)
-// and removes trailing zeros.
+// Writes a significand and removes trailing zeros. value has up to 17 decimal
+// digits (16-17 for normals) for double (num_bits == 64) and up to 9 digits
+// (8-9 for normals) for float. The significant digits start from buffer[1].
+// buffer[0] may contain '0' after this function if the leading digit is zero.
 #[cfg_attr(feature = "no-panic", no_panic)]
-unsafe fn write_significand9(mut buffer: *mut u8, value: u32, has9digits: bool) -> *mut u8 {
-    buffer = unsafe { write_if(buffer, value / 100_000_000, has9digits) };
-    let bcd = to_bcd8(u64::from(value % 100_000_000));
-    unsafe {
-        write8(buffer, bcd + ZEROS);
-        buffer.add(count_trailing_nonzeros(bcd))
-    }
-}
-
-// Writes a significand consisting of up to 17 decimal digits (16-17 for
-// normals) and removes trailing zeros. The significant digits start from
-// buffer[1]. buffer[0] may contain '0' after this function if the significand
-// has length 16.
-#[cfg_attr(feature = "no-panic", no_panic)]
-unsafe fn write_significand17(
+unsafe fn write_significand<Float>(
     mut buffer: *mut u8,
     value: u64,
-    has17digits: bool,
+    extra_digit: bool,
     #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))] value_div10: i64,
-) -> *mut u8 {
+) -> *mut u8
+where
+    Float: FloatTraits,
+{
+    if Float::NUM_BITS == 32 {
+        buffer = unsafe { write_if(buffer, (value / 100_000_000) as u32, extra_digit) };
+        let bcd = to_bcd8(value % 100_000_000);
+        unsafe {
+            write8(buffer, bcd + ZEROS);
+            return buffer.add(count_trailing_nonzeros(bcd));
+        }
+    }
+
     #[cfg(not(any(
         all(target_arch = "aarch64", target_feature = "neon", not(miri)),
         all(target_arch = "x86_64", target_feature = "sse2", not(miri)),
@@ -495,7 +495,7 @@ unsafe fn write_significand17(
         // Digits/pairs of digits are denoted by letters: value = abbccddeeffgghhii.
         let abbccddee = (value / 100_000_000) as u32;
         let ffgghhii = (value % 100_000_000) as u32;
-        buffer = unsafe { write_if(buffer, abbccddee / 100_000_000, has17digits) };
+        buffer = unsafe { write_if(buffer, abbccddee / 100_000_000, extra_digit) };
         let bcd = to_bcd8(u64::from(abbccddee % 100_000_000));
         unsafe {
             write8(buffer, bcd + ZEROS);
@@ -566,7 +566,7 @@ unsafe fn write_significand17(
         let a = (umul128(abbccddee, c.mul_const) >> 90) as u64;
         let bbccddee = abbccddee - a * hundred_million;
 
-        buffer = unsafe { write_if(buffer, a as u32, has17digits) };
+        buffer = unsafe { write_if(buffer, a as u32, extra_digit) };
 
         unsafe {
             let ffgghhii_bbccddee_64: uint64x1_t =
@@ -636,7 +636,7 @@ unsafe fn write_significand17(
         // zero. buffer points to the second place in the output buffer to allow
         // for the insertion of the decimal point, so we can use the first place
         // as scratch.
-        buffer = unsafe { buffer.offset(isize::from(has17digits) - 1) };
+        buffer = unsafe { buffer.offset(isize::from(extra_digit) - 1) };
         unsafe {
             *buffer.add(16) = last_digit as u8 + b'0';
         }
@@ -1039,18 +1039,14 @@ where
     }
 
     // Write significand.
-    let end = if Float::NUM_BITS == 64 {
-        unsafe {
-            write_significand17(
-                buffer.add(1),
-                dec.sig as u64,
-                extra_digit,
-                #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
-                dec.sig_div10,
-            )
-        }
-    } else {
-        unsafe { write_significand9(buffer.add(1), dec.sig as u32, extra_digit) }
+    let end = unsafe {
+        write_significand::<Float>(
+            buffer.add(1),
+            dec.sig as u64,
+            extra_digit,
+            #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
+            dec.sig_div10,
+        )
     };
 
     let length = unsafe { end.offset_from(buffer.add(1)) } as usize;
