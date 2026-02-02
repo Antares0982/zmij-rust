@@ -91,6 +91,12 @@ const NAN: &str = "NaN";
 const INFINITY: &str = "inf";
 const NEG_INFINITY: &str = "-inf";
 
+// Returns true_value if lhs < rhs, else false_value, without branching.
+#[inline]
+fn select_if_less(lhs: u64, rhs: u64, true_value: i64, false_value: i64) -> i64 {
+    hint::select_unpredictable(lhs < rhs, true_value, false_value)
+}
+
 #[cfg_attr(test, derive(Debug, PartialEq))]
 struct uint128 {
     hi: u64,
@@ -935,13 +941,11 @@ where
             break;
         }
 
-        let round_up = upper >= ten;
         let shorter = (integral.into() - digit) as i64;
         let longer = (integral.into() + u64::from(cmp >= 0)) as i64;
-        let dec_sig =
-            hint::select_unpredictable(scaled_sig_mod10 < scaled_half_ulp, shorter, longer);
+        let dec_sig = select_if_less(scaled_sig_mod10, scaled_half_ulp, shorter, longer);
         return ToDecimalResult {
-            sig: hint::select_unpredictable(round_up, shorter + 10, dec_sig),
+            sig: select_if_less(ten, upper, shorter + 10, dec_sig),
             exp: dec_exp,
         };
     }
