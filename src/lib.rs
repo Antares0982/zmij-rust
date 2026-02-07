@@ -191,6 +191,23 @@ impl FloatTraits for f64 {
     }
 }
 
+const fn floor_log2_pow10(e: i32) -> i32 {
+    (e * 1741647) >> 19
+}
+
+#[rustfmt::skip]
+const POWERS_OF_5: [u64; 27] = [
+    0x0000000000000001, 0x0000000000000005, 0x0000000000000019,
+    0x000000000000007d, 0x0000000000000271, 0x0000000000000c35,
+    0x0000000000003d09, 0x000000000001312d, 0x000000000005f5e1,
+    0x00000000001dcd65, 0x00000000009502f9, 0x0000000002e90edd,
+    0x000000000e8d4a51, 0x0000000048c27395, 0x000000016bcc41e9,
+    0x000000071afd498d, 0x0000002386f26fc1, 0x000000b1a2bc2ec5,
+    0x000003782dace9d9, 0x00001158e460913d, 0x000056bc75e2d631,
+    0x0001b1ae4d6e2ef5, 0x000878678326eac9, 0x002a5a058fc295ed,
+    0x00d3c21bcecceda1, 0x0422ca8b0a00a425, 0x14adf4b7320334b9,
+];
+
 #[repr(C, align(64))]
 struct Pow10SignificandsTable {
     data: [u64; (Self::NUM_POW10 / Self::COMPRESSION_RATIO + Self::COMPRESS as usize) * 2],
@@ -198,12 +215,46 @@ struct Pow10SignificandsTable {
 
 impl Pow10SignificandsTable {
     const COMPRESS: bool = false;
-    const SPLIT_TABLES: bool = cfg!(target_arch = "aarch64");
+    const SPLIT_TABLES: bool = !Self::COMPRESS && cfg!(target_arch = "aarch64");
     const NUM_POW10: usize = 617;
     const COMPRESSION_RATIO: usize = if Self::COMPRESS { 27 } else { 1 };
 
     unsafe fn get_unchecked(&self, dec_exp: i32) -> uint128 {
         const DEC_EXP_MIN: i32 = -292;
+        if Self::COMPRESS {
+            let base_index = (dec_exp - DEC_EXP_MIN) / Self::COMPRESSION_RATIO as i32;
+            let base_dec_exp = base_index * Self::COMPRESSION_RATIO as i32 + DEC_EXP_MIN;
+            let offset = dec_exp - base_dec_exp;
+
+            let base_hi = unsafe { *self.data.get_unchecked((base_index * 2) as usize) };
+            let base_lo = unsafe { *self.data.get_unchecked((base_index * 2 + 1) as usize) };
+            if offset == 0 {
+                return uint128 {
+                    hi: base_hi,
+                    lo: base_lo,
+                };
+            }
+
+            let shift =
+                floor_log2_pow10(base_dec_exp + offset) - floor_log2_pow10(base_dec_exp) - offset;
+
+            let pow5 = unsafe { *POWERS_OF_5.get_unchecked(offset as usize) };
+            let p_hi = umul128(base_hi, pow5);
+            let p_lo = umul128(base_lo, pow5);
+
+            let mut r_hi = (p_hi >> 64) as u64;
+            let r_lo = p_hi as u64 + (p_lo >> 64) as u64;
+            if r_lo < p_hi as u64 {
+                r_hi += 1;
+            }
+
+            let lo = ((p_lo as u64 >> shift) | (r_lo << (64 - shift))).wrapping_add(1);
+            let hi = (r_lo >> shift) | (r_hi << (64 - shift));
+            return uint128 {
+                hi: if lo != 0 { hi } else { hi + 1 },
+                lo,
+            };
+        }
         if !Self::SPLIT_TABLES {
             let index = ((dec_exp - DEC_EXP_MIN) * 2) as usize;
             return uint128 {
@@ -267,14 +318,13 @@ static POW10_SIGNIFICANDS: Pow10SignificandsTable = {
         w2: 0xff77b1fcbebcdc4f,
     };
     let ten = 0xa000000000000000;
-    let table_size = data.len() / 2;
     let mut i = 0;
     while i < Pow10SignificandsTable::NUM_POW10 {
         if i % Pow10SignificandsTable::COMPRESSION_RATIO == 0 {
             let index = i / Pow10SignificandsTable::COMPRESSION_RATIO;
             if Pow10SignificandsTable::SPLIT_TABLES {
-                data[table_size - index - 1] = current.w2;
-                data[table_size * 2 - index - 1] = current.w1;
+                data[Pow10SignificandsTable::NUM_POW10 - index - 1] = current.w2;
+                data[Pow10SignificandsTable::NUM_POW10 * 2 - index - 1] = current.w1;
             } else {
                 data[index * 2] = current.w2;
                 data[index * 2 + 1] = current.w1;
