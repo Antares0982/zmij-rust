@@ -325,7 +325,7 @@ impl Pow10SignificandsTable {
 }
 
 // 128-bit significands of powers of 10 rounded down.
-// Generated using 192-bit arithmetic method by Dougall Johnson.
+// Generation with 192-bit arithmetic and compression by Dougall Johnson.
 static POW10_SIGNIFICANDS: Pow10SignificandsTable = {
     let mut data = [0; if Pow10SignificandsTable::COMPRESS {
         0
