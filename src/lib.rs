@@ -195,7 +195,7 @@ impl FloatTraits for f64 {
 #[repr(C, align(64))]
 struct Pow10SignificandsTable {
     data: [u64; if Self::COMPRESS {
-        1
+        0
     } else {
         Self::NUM_POW10 * 2
     }],
@@ -328,7 +328,7 @@ impl Pow10SignificandsTable {
 // Generated using 192-bit arithmetic method by Dougall Johnson.
 static POW10_SIGNIFICANDS: Pow10SignificandsTable = {
     let mut data = [0; if Pow10SignificandsTable::COMPRESS {
-        1
+        0
     } else {
         Pow10SignificandsTable::NUM_POW10 * 2
     }];
