@@ -209,8 +209,8 @@ impl Pow10SignificandsTable {
     unsafe fn get_unchecked(&self, dec_exp: i32) -> uint128 {
         const DEC_EXP_MIN: i32 = -292;
         if Self::COMPRESS {
+            // Compressed version using only 672 bytes of data.
             let i = dec_exp - DEC_EXP_MIN;
-            // 672 bytes of data
             #[rustfmt::skip]
             static POW10S: [u64; 28] = [
                 0x8000000000000000, 0xa000000000000000, 0xc800000000000000,
