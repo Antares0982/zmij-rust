@@ -1288,3 +1288,34 @@ impl Default for Buffer {
         Buffer::new()
     }
 }
+
+// ---------------------------------------------------------------------------
+// C FFI
+// ---------------------------------------------------------------------------
+
+/// Writes the shortest decimal representation of a `f64` (C `double`) value
+/// into `buffer`. The caller must ensure `buffer` points to at least 24 bytes
+/// of writable memory. The input must be a finite value (not NaN or Infinity).
+///
+/// Returns a pointer to one past the last byte written.
+///
+/// # Safety
+///
+/// `buffer` must be non-null and point to at least 24 writable bytes.
+/// `value` must be finite.
+#[cfg(feature = "clib")]
+#[no_mangle]
+pub unsafe extern "C" fn zmij_write_f64(value: f64, buffer: *mut u8) -> *mut u8 {
+    unsafe { write(value, buffer) }
+}
+
+// ---------------------------------------------------------------------------
+// Panic handler & related lang items for staticlib (no_std)
+// ---------------------------------------------------------------------------
+
+#[cfg(all(feature = "clib", not(test)))]
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    // This library never panics. Provide an abort as a safety net.
+    unsafe { core::hint::unreachable_unchecked() }
+}
